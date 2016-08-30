@@ -9,13 +9,13 @@
 		</encoder>
 	</appender>
 	<logger name="org.tcpid.opretj.testapp.App" level="debug" />
-	<logger name="org.tcpid.opretj.OPRETECParser" level="debug" />
 <!-- 
+	<logger name="org.tcpid.opretj.OPRETECParser" level="debug" />
 	<logger name="eckey.OPRETSimpleLogger" level="debug" />
 	<logger name="eckey.OPRETSimpleParser" level="debug" />
 	<logger name="eckey.OPRETBaseHandler" level="debug" />
  -->	
-	<root level="warn">
+	<root level="info">
 		<appender-ref ref="STDOUT" />
 	</root>
 </configuration>

@@ -4,6 +4,7 @@ import static org.bitcoinj.script.ScriptOpCodes.OP_RETURN;
 
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.util.Arrays;
 import java.util.InputMismatchException;
@@ -14,6 +15,7 @@ import joptsimple.OptionSet;
 import joptsimple.OptionSpec;
 import org.abstractj.kalium.keys.SigningKey;
 import org.abstractj.kalium.keys.VerifyKey;
+import org.bitcoinj.core.CheckpointManager;
 import org.bitcoinj.core.Coin;
 import org.bitcoinj.core.ECKey;
 import org.bitcoinj.core.InsufficientMoneyException;
@@ -67,7 +69,7 @@ public class App {
             logger.warn("SIGNATURE does not match!");
         }
     }
-
+    
     public static void main(String[] args)  throws Exception {
         OptionParser parser = new OptionParser();
         OptionSpec<NetworkEnum> net = parser.accepts("net", "The network to run the examples on").withRequiredArg().ofType(NetworkEnum.class).defaultsTo(NetworkEnum.TEST);
@@ -117,7 +119,7 @@ public class App {
         if (params.getId().equals(NetworkParameters.ID_REGTEST)) {
         	kit.connectToLocalHost();
         }
-
+        kit.setCheckpoints(App.class.getResourceAsStream("/" + params.getId() + ".checkpoints"));
         // Now we start the kit and sync the blockchain.
         // bitcoinj is working a lot with the Google Guava libraries. The
         // WalletAppKit extends the AbstractIdleService. Have a look at the
@@ -167,14 +169,7 @@ public class App {
         // listener gets notified when something happens.
         // To test everything we create and print a fresh receiving address.
         // Send some coins to that address and see if everything works.
-        String receiveStr = wallet.freshReceiveAddress().toString();
-        System.out.println("send money to: " + receiveStr);
-        try {
-        	System.out.print(executeCommand("qrencode -t UTF8 -o - " + receiveStr));
-        } catch (Exception e) {
-        	;
-        }
-        
+        String receiveStr = wallet.freshReceiveAddress().toString();        
         final Scanner input = new Scanner(System.in);
 
         display: while (true) {
@@ -193,7 +188,12 @@ public class App {
                     System.out.println("Balance: " + wallet.getBalance().toFriendlyString());
                     break;
                 case 2:
-                    System.out.println("send money to: " + wallet.freshReceiveAddress().toString());
+                    System.out.println("send money to: " + receiveStr);
+                    try {
+                    	System.out.print(executeCommand("qrencodes -t UTF8 -o - " + receiveStr));
+                    } catch (Exception e) {
+                    	;
+                    }
                     break;
                 case 3:
                     sendOPReturn(kit);
