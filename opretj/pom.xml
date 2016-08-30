@@ -50,5 +50,13 @@
    </plugins>
   </pluginManagement>
  </build>
+ <name>opretj</name>
+ <url>https://github.com/bitcoinj/bitcoinj</url>
+ <scm>
+ 	<url>scm:git:https://github.com/haraldh/opretj.git</url>
+ </scm>
+ <issueManagement>
+ 	<url>https://github.com/haraldh/opretj/issues</url>
+ </issueManagement>
 </project>
 </project>

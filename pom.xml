@@ -8,4 +8,12 @@
   	<module>opretj</module>
   	<module>opret-testapp</module>
   </modules>
+  <url>https://github.com/bitcoinj/bitcoinj</url>
+  <name>opretj-parent</name>
+  <scm>
+  	<url>scm:git:https://github.com/haraldh/opretj.git</url>
+  </scm>
+  <issueManagement>
+  	<url>https://github.com/haraldh/opretj/issues</url>
+  </issueManagement>
 </project>

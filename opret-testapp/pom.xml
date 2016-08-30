@@ -81,4 +81,12 @@
     </plugins>
   </build>
   
+  <scm>
+  	<url>scm:git:https://github.com/haraldh/opretj.git</url>
+  </scm>
+  <issueManagement>
+  	<url>https://github.com/haraldh/opretj/issues</url>
+  </issueManagement>
+  <name>opretj testapp</name>
+  <url>https://github.com/bitcoinj/bitcoinj</url>
 </project>
