@@ -16,4 +16,7 @@
   <issueManagement>
   	<url>https://github.com/haraldh/opretj/issues</url>
   </issueManagement>
+  <properties>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+  </properties>
 </project>
