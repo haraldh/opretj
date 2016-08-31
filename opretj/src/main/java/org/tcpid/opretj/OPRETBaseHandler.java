@@ -1,6 +1,5 @@
 package org.tcpid.opretj;
 
-
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -21,7 +20,7 @@ public abstract class OPRETBaseHandler implements OPRETHandlerInterface {
     private final Map<List<Byte>, Long> magicBytes = new HashMap<>();
 
     @Override
-    public void addOPRET(byte[] magic, long earliestTime) {
+    public void addOPRET(final byte[] magic, final long earliestTime) {
         logger.debug("addMagicBytes: {} - Time {}", Utils.HEX.encode(magic), earliestTime);
         final List<Byte> blist = Bytes.asList(magic);
         magicBytes.put(blist, earliestTime);
@@ -34,7 +33,7 @@ public abstract class OPRETBaseHandler implements OPRETHandlerInterface {
      * given executor.
      */
     @Override
-    public void addOPRETChangeEventListener(Executor executor, OPRETChangeEventListener listener) {
+    public void addOPRETChangeEventListener(final Executor executor, final OPRETChangeEventListener listener) {
         // This is thread safe, so we don't need to take the lock.
         opReturnChangeListeners.add(new ListenerRegistration<OPRETChangeEventListener>(listener, executor));
     }
@@ -65,17 +64,12 @@ public abstract class OPRETBaseHandler implements OPRETHandlerInterface {
 
     protected void queueOnOPRETChanged() {
         for (final ListenerRegistration<OPRETChangeEventListener> registration : opReturnChangeListeners) {
-            registration.executor.execute(new Runnable() {
-                @Override
-                public void run() {
-                    registration.listener.onOPRETChanged();
-                }
-            });
+            registration.executor.execute(() -> registration.listener.onOPRETChanged());
         }
     }
 
     @Override
-    public void removeOPRET(byte[] magic) {
+    public void removeOPRET(final byte[] magic) {
         magicBytes.remove(Bytes.asList(magic));
         queueOnOPRETChanged();
     }
@@ -85,7 +79,7 @@ public abstract class OPRETBaseHandler implements OPRETHandlerInterface {
      * removed, false if that listener was never added.
      */
     @Override
-    public boolean removeOPRETChangeEventListener(OPRETChangeEventListener listener) {
+    public boolean removeOPRETChangeEventListener(final OPRETChangeEventListener listener) {
         return ListenerRegistration.removeFromList(listener, opReturnChangeListeners);
     }
 

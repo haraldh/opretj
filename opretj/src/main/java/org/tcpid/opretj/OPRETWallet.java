@@ -1,6 +1,5 @@
 package org.tcpid.opretj;
 
-
 import static org.bitcoinj.script.ScriptOpCodes.OP_RETURN;
 
 import java.util.ArrayList;
@@ -42,14 +41,15 @@ public class OPRETWallet extends Wallet implements BlocksDownloadedEventListener
     private final Set<Sha256Hash> blocksToStore = new HashSet<>();
     protected final Map<Sha256Hash, Transaction> pendingTransactions;
 
-    public OPRETWallet(NetworkParameters params, KeyChainGroup keyChainGroup, OPRETHandlerInterface bs) {
+    public OPRETWallet(final NetworkParameters params, final KeyChainGroup keyChainGroup,
+            final OPRETHandlerInterface bs) {
         super(params, keyChainGroup);
         opbs = bs;
         pendingTransactions = new HashMap<Sha256Hash, Transaction>();
     }
 
     @Override
-    public BloomFilter getBloomFilter(int size, double falsePositiveRate, long nTweak) {
+    public BloomFilter getBloomFilter(final int size, final double falsePositiveRate, final long nTweak) {
         beginBloomFilterCalculation();
         try {
             final BloomFilter filter = super.getBloomFilter(size, falsePositiveRate, nTweak);
@@ -86,7 +86,7 @@ public class OPRETWallet extends Wallet implements BlocksDownloadedEventListener
     }
 
     @Override
-    public boolean isPendingTransactionRelevant(Transaction tx) throws ScriptException {
+    public boolean isPendingTransactionRelevant(final Transaction tx) throws ScriptException {
         logger.debug("isPendingTransactionRelevant {}", tx.getHashAsString());
 
         if (pendingTransactions.containsValue(tx)) {
@@ -100,7 +100,7 @@ public class OPRETWallet extends Wallet implements BlocksDownloadedEventListener
         return false;
     }
 
-    public List<List<Byte>> isTransactionOPReturn(Transaction tx) throws ScriptException {
+    public List<List<Byte>> isTransactionOPReturn(final Transaction tx) throws ScriptException {
         final Set<List<Byte>> magicBytes = opbs.getOPRETSet();
         final List<List<Byte>> myList = new ArrayList<>();
 
@@ -142,7 +142,8 @@ public class OPRETWallet extends Wallet implements BlocksDownloadedEventListener
     }
 
     @Override
-    public void onBlocksDownloaded(Peer peer, Block block, FilteredBlock filteredBlock, int blocksLeft) {
+    public void onBlocksDownloaded(final Peer peer, final Block block, final FilteredBlock filteredBlock,
+            final int blocksLeft) {
         if (!blocksToStore.contains(block.getHash())) {
             return;
         }
@@ -158,8 +159,8 @@ public class OPRETWallet extends Wallet implements BlocksDownloadedEventListener
     }
 
     @Override
-    public void receiveFromBlock(Transaction tx, StoredBlock block, BlockChain.NewBlockType blockType,
-            int relativityOffset) throws VerificationException {
+    public void receiveFromBlock(final Transaction tx, final StoredBlock block, final BlockChain.NewBlockType blockType,
+            final int relativityOffset) throws VerificationException {
 
         super.receiveFromBlock(tx, block, blockType, relativityOffset);
 

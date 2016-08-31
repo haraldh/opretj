@@ -1,6 +1,5 @@
 package org.tcpid.opretj;
 
-
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -30,32 +29,13 @@ public class OPRETECParser extends OPRETBaseHandler {
      * scripts watched by this wallet change. The listener is executed by the
      * given executor.
      */
-    public void addOPRETECRevokeEventListener(OPRETECRevokeEventListener listener) {
+    public void addOPRETECRevokeEventListener(final OPRETECRevokeEventListener listener) {
         // This is thread safe, so we don't need to take the lock.
         opReturnChangeListeners
                 .add(new ListenerRegistration<OPRETECRevokeEventListener>(listener, Threading.USER_THREAD));
     }
 
-    /**
-     * Removes the given event listener object. Returns true if the listener was
-     * removed, false if that listener was never added.
-     */
-    public boolean removeOPRETECRevokeEventListener(OPRETECRevokeEventListener listener) {
-        return ListenerRegistration.removeFromList(listener, opReturnChangeListeners);
-    }
-
-    protected void queueOnOPRETRevoke(final byte[] pkhash, final byte[] sig) {
-        for (final ListenerRegistration<OPRETECRevokeEventListener> registration : opReturnChangeListeners) {
-            registration.executor.execute(new Runnable() {
-                @Override
-                public void run() {
-                    registration.listener.onOPRETRevoke(pkhash, sig);
-                }
-            });
-        }
-    }
-
-    private boolean checkData(OPRETTransaction t1, OPRETTransaction t2) {
+    private boolean checkData(final OPRETTransaction t1, final OPRETTransaction t2) {
         final List<List<Byte>> opret_data = new ArrayList<>(t1.opretData);
         opret_data.addAll(t2.opretData);
         logger.debug("checking {}", opret_data);
@@ -101,7 +81,7 @@ public class OPRETECParser extends OPRETBaseHandler {
         return false;
     }
 
-    private boolean handleRevoke(OPRETTransaction t1, OPRETTransaction t2) {
+    private boolean handleRevoke(final OPRETTransaction t1, final OPRETTransaction t2) {
         final byte[] pkhash = Bytes.toArray(t1.opretData.get(2));
         final byte[] sig = Bytes.concat(Bytes.toArray(t1.opretData.get(3)), Bytes.toArray(t2.opretData.get(3)));
 
@@ -132,5 +112,19 @@ public class OPRETECParser extends OPRETBaseHandler {
         merkleHashMap.put(blockHash, partialMerkleTree);
         logger.info("block hash {}", blockHash);
         logger.info("Merkle Tree: {}", partialMerkleTree);
+    }
+
+    protected void queueOnOPRETRevoke(final byte[] pkhash, final byte[] sig) {
+        for (final ListenerRegistration<OPRETECRevokeEventListener> registration : opReturnChangeListeners) {
+            registration.executor.execute(() -> registration.listener.onOPRETRevoke(pkhash, sig));
+        }
+    }
+
+    /**
+     * Removes the given event listener object. Returns true if the listener was
+     * removed, false if that listener was never added.
+     */
+    public boolean removeOPRETECRevokeEventListener(final OPRETECRevokeEventListener listener) {
+        return ListenerRegistration.removeFromList(listener, opReturnChangeListeners);
     }
 }
