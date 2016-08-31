@@ -4,20 +4,14 @@ import static org.bitcoinj.script.ScriptOpCodes.OP_RETURN;
 
 import java.io.BufferedReader;
 import java.io.File;
-import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.util.Arrays;
 import java.util.InputMismatchException;
-import java.util.List;
 import java.util.Scanner;
-import joptsimple.OptionParser;
-import joptsimple.OptionSet;
-import joptsimple.OptionSpec;
+
 import org.abstractj.kalium.keys.SigningKey;
 import org.abstractj.kalium.keys.VerifyKey;
-import org.bitcoinj.core.CheckpointManager;
 import org.bitcoinj.core.Coin;
-import org.bitcoinj.core.ECKey;
 import org.bitcoinj.core.InsufficientMoneyException;
 import org.bitcoinj.core.NetworkParameters;
 import org.bitcoinj.core.Sha256Hash;
@@ -25,23 +19,22 @@ import org.bitcoinj.core.Transaction;
 import org.bitcoinj.core.TransactionConfidence;
 import org.bitcoinj.core.TransactionOutput;
 import org.bitcoinj.core.Utils;
-import org.bitcoinj.core.listeners.TransactionConfidenceEventListener;
 import org.bitcoinj.script.Script;
 import org.bitcoinj.script.ScriptBuilder;
 import org.bitcoinj.wallet.KeyChain.KeyPurpose;
 import org.bitcoinj.wallet.SendRequest;
-import org.bitcoinj.wallet.Wallet;
 import org.bitcoinj.wallet.Wallet.SendResult;
-import org.bitcoinj.wallet.listeners.KeyChainEventListener;
-import org.bitcoinj.wallet.listeners.ScriptsChangeEventListener;
-import org.bitcoinj.wallet.listeners.WalletCoinsReceivedEventListener;
-import org.bitcoinj.wallet.listeners.WalletCoinsSentEventListener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.tcpid.opretj.*;
+import org.tcpid.opretj.OPRETECParser;
+import org.tcpid.opretj.OPRETWallet;
+import org.tcpid.opretj.OPRETWalletAppKit;
 
 import com.google.common.primitives.Bytes;
 
+import joptsimple.OptionParser;
+import joptsimple.OptionSet;
+import joptsimple.OptionSpec;
 
 public class App {
     private static final Logger logger = LoggerFactory.getLogger(App.class);
@@ -69,12 +62,36 @@ public class App {
             logger.warn("SIGNATURE does not match!");
         }
     }
-    
-    public static void main(String[] args)  throws Exception {
-        OptionParser parser = new OptionParser();
-        OptionSpec<NetworkEnum> net = parser.accepts("net", "The network to run the examples on").withRequiredArg().ofType(NetworkEnum.class).defaultsTo(NetworkEnum.TEST);
+
+    private static String executeCommand(final String command) {
+
+        final StringBuffer output = new StringBuffer();
+
+        Process p;
+        try {
+            p = Runtime.getRuntime().exec(command);
+            p.waitFor();
+            final BufferedReader reader = new BufferedReader(new InputStreamReader(p.getInputStream()));
+
+            String line = "";
+            while ((line = reader.readLine()) != null) {
+                output.append(line + "\n");
+            }
+
+        } catch (final Exception e) {
+            e.printStackTrace();
+        }
+
+        return output.toString();
+
+    }
+
+    public static void main(final String[] args) throws Exception {
+        final OptionParser parser = new OptionParser();
+        final OptionSpec<NetworkEnum> net = parser.accepts("net", "The network to run the examples on")
+                .withRequiredArg().ofType(NetworkEnum.class).defaultsTo(NetworkEnum.TEST);
         parser.accepts("help", "Displays program options");
-        OptionSet opts = parser.parse(args);
+        final OptionSet opts = parser.parse(args);
         if (opts.has("help") || !opts.has(net)) {
             System.err.println("usage: App --net=MAIN/TEST/REGTEST");
             parser.printHelpOn(System.err);
@@ -84,13 +101,7 @@ public class App {
 
         final OPRETECParser bs = new OPRETECParser();
 
-        bs.addOPRETECRevokeEventListener(new OPRETECRevokeEventListener() {
-            public void onOPRETRevoke(final byte[] pkhash, final byte[] sig) {
-                // logger.warn("REVOKE PK {} - SIG {}",
-                // Utils.HEX.encode(pkhash), Utils.HEX.encode(sig));
-                check(pkhash, sig);
-            }
-        });
+        bs.addOPRETECRevokeEventListener((pkhash, sig) -> check(pkhash, sig));
 
         long earliestTime;
         if (params.getId().equals(NetworkParameters.ID_REGTEST)) {
@@ -102,8 +113,9 @@ public class App {
         }
 
         bs.addOPRET(pkhash, earliestTime);
-        //bs.addOPRET(Sha256Hash.hash("test1".getBytes()), earliestTime);
-        //bs.addOPRET(Utils.HEX.decode("0f490dee643b01b06e0ea84c253a90050a3543cfb7c74319fb47b04afee5b872"), earliestTime);
+        // bs.addOPRET(Sha256Hash.hash("test1".getBytes()), earliestTime);
+        // bs.addOPRET(Utils.HEX.decode("0f490dee643b01b06e0ea84c253a90050a3543cfb7c74319fb47b04afee5b872"),
+        // earliestTime);
 
         // Now we initialize a new WalletAppKit. The kit handles all the
         // boilerplate for us and is the easiest way to get everything up and
@@ -117,7 +129,7 @@ public class App {
         // connect to localhost.
         // You must do that in reg test mode.
         if (params.getId().equals(NetworkParameters.ID_REGTEST)) {
-        	kit.connectToLocalHost();
+            kit.connectToLocalHost();
         }
         kit.setCheckpoints(App.class.getResourceAsStream("/" + params.getId() + ".checkpoints"));
         // Now we start the kit and sync the blockchain.
@@ -130,46 +142,31 @@ public class App {
 
         final OPRETWallet wallet = kit.opretwallet();
 
-        wallet.addCoinsReceivedEventListener(new WalletCoinsReceivedEventListener() {
-            public void onCoinsReceived(Wallet wallet, Transaction tx, Coin prevBalance, Coin newBalance) {
-                System.out.println("-----> coins resceived: " + tx.getHashAsString());
-                System.out.println("received: " + tx.getValue(wallet));
-            }
+        wallet.addCoinsReceivedEventListener((wallet1, tx, prevBalance, newBalance) -> {
+            System.out.println("-----> coins resceived: " + tx.getHashAsString());
+            System.out.println("received: " + tx.getValue(wallet1));
         });
 
-        wallet.addCoinsSentEventListener(new WalletCoinsSentEventListener() {
-            public void onCoinsSent(Wallet wallet, Transaction tx, Coin prevBalance, Coin newBalance) {
-                System.out.println("coins sent");
-            }
+        wallet.addCoinsSentEventListener((wallet1, tx, prevBalance, newBalance) -> System.out.println("coins sent"));
+
+        wallet.addKeyChainEventListener(keys -> System.out.println("new key added"));
+
+        wallet.addScriptsChangeEventListener(
+                (wallet1, scripts, isAddingScripts) -> System.out.println("new script added"));
+
+        wallet.addTransactionConfidenceEventListener((wallet1, tx) -> {
+            System.out.println("-----> confidence changed: " + tx.getHashAsString());
+            final TransactionConfidence confidence = tx.getConfidence();
+            System.out.println("new block depth: " + confidence.getDepthInBlocks());
         });
 
-        wallet.addKeyChainEventListener(new KeyChainEventListener() {
-            public void onKeysAdded(List<ECKey> keys) {
-                System.out.println("new key added");
-            }
-        });
-
-        wallet.addScriptsChangeEventListener(new ScriptsChangeEventListener() {
-            public void onScriptsChanged(Wallet wallet, List<Script> scripts, boolean isAddingScripts) {
-                System.out.println("new script added");
-            }
-        });
-
-        wallet.addTransactionConfidenceEventListener(new TransactionConfidenceEventListener() {
-            public void onTransactionConfidenceChanged(Wallet wallet, Transaction tx) {
-                System.out.println("-----> confidence changed: " + tx.getHashAsString());
-                final TransactionConfidence confidence = tx.getConfidence();
-                System.out.println("new block depth: " + confidence.getDepthInBlocks());
-            }
-        });
-
-        //wallet.allowSpendingUnconfirmedTransactions();
+        // wallet.allowSpendingUnconfirmedTransactions();
 
         // Ready to run. The kit syncs the blockchain and our wallet event
         // listener gets notified when something happens.
         // To test everything we create and print a fresh receiving address.
         // Send some coins to that address and see if everything works.
-        String receiveStr = wallet.freshReceiveAddress().toString();        
+        final String receiveStr = wallet.freshReceiveAddress().toString();
         final Scanner input = new Scanner(System.in);
 
         display: while (true) {
@@ -190,9 +187,9 @@ public class App {
                 case 2:
                     System.out.println("send money to: " + receiveStr);
                     try {
-                    	System.out.print(executeCommand("qrencodes -t UTF8 -o - " + receiveStr));
-                    } catch (Exception e) {
-                    	;
+                        System.out.print(executeCommand("qrencodes -t UTF8 -o - " + receiveStr));
+                    } catch (final Exception e) {
+                        ;
                     }
                     break;
                 case 3:
@@ -219,7 +216,7 @@ public class App {
         kit.awaitTerminated();
     }
 
-    private static boolean sendOPReturn(OPRETWalletAppKit kit) {
+    private static boolean sendOPReturn(final OPRETWalletAppKit kit) {
         final OPRETWallet wallet = kit.opretwallet();
         final NetworkParameters params = wallet.getNetworkParameters();
 
@@ -270,28 +267,4 @@ public class App {
         logger.debug("SendRequest {}", request);
         return true;
     }
-    
-	private static String executeCommand(String command) {
-
-		StringBuffer output = new StringBuffer();
-
-		Process p;
-		try {
-			p = Runtime.getRuntime().exec(command);
-			p.waitFor();
-			BufferedReader reader =
-                            new BufferedReader(new InputStreamReader(p.getInputStream()));
-
-                        String line = "";
-			while ((line = reader.readLine())!= null) {
-				output.append(line + "\n");
-			}
-
-		} catch (Exception e) {
-			e.printStackTrace();
-		}
-
-		return output.toString();
-
-	}
 }
