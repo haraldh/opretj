@@ -21,6 +21,7 @@ import org.bitcoinj.core.TransactionOutput;
 import org.bitcoinj.core.Utils;
 import org.bitcoinj.script.Script;
 import org.bitcoinj.script.ScriptBuilder;
+import org.bitcoinj.utils.Threading;
 import org.bitcoinj.wallet.KeyChain.KeyPurpose;
 import org.bitcoinj.wallet.SendRequest;
 import org.bitcoinj.wallet.Wallet.SendResult;
@@ -31,6 +32,7 @@ import org.tcpid.opretj.OPRETWallet;
 import org.tcpid.opretj.OPRETWalletAppKit;
 
 import com.google.common.primitives.Bytes;
+import com.google.common.util.concurrent.Service;
 
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
@@ -46,7 +48,7 @@ public class App {
     private static byte[] pkhash = Sha256Hash.hash(v.toBytes());
     static byte[] revokemsg = Bytes.concat("Revoke ".getBytes(), pkhash);
 
-    public static void check(final byte[] pkhash, final byte[] sig) {
+    public static void checkKey(final byte[] pkhash, final byte[] sig) {
         logger.warn("CHECKING REVOKE PK {} - SIG {}", Utils.HEX.encode(pkhash), Utils.HEX.encode(sig));
 
         if (!Arrays.equals(App.pkhash, pkhash)) {
@@ -101,7 +103,7 @@ public class App {
 
         final OPRETECParser bs = new OPRETECParser();
 
-        bs.addOPRETECRevokeEventListener((pkhash, sig) -> check(pkhash, sig));
+        bs.addOPRETECRevokeEventListener((pkhash, sig) -> checkKey(pkhash, sig));
 
         long earliestTime;
         if (params.getId().equals(NetworkParameters.ID_REGTEST)) {
@@ -125,6 +127,14 @@ public class App {
         // https://github.com/bitcoinj/bitcoinj/blob/master/core/src/main/java/org/bitcoinj/kits/WalletAppKit.java
         final OPRETWalletAppKit kit = new OPRETWalletAppKit(params, new File("."), "opretwallet" + params.getId(), bs);
 
+        kit.addListener(new Service.Listener() {
+            @Override
+            public void failed(final Service.State from, final Throwable failure) {
+                logger.error(failure.getMessage());
+                System.exit(-1);
+            }
+        }, Threading.SAME_THREAD);
+
         // In case you want to connect with your local bitcoind tell the kit to
         // connect to localhost.
         // You must do that in reg test mode.
@@ -138,7 +148,16 @@ public class App {
         // introduction to Guava services:
         // https://github.com/google/guava/wiki/ServiceExplained
         kit.startAsync();
-        kit.awaitRunning();
+        System.out.println("Please wait for the blockchain to be downloaded!");
+        try {
+            kit.awaitRunning();
+        } catch (final Exception e) {
+            System.err.println("Aborting - shutting down");
+            // e.printStackTrace();
+            kit.stopAsync();
+            kit.awaitTerminated();
+            System.exit(-1);
+        }
 
         final OPRETWallet wallet = kit.opretwallet();
 
@@ -159,7 +178,6 @@ public class App {
             final TransactionConfidence confidence = tx.getConfidence();
             System.out.println("new block depth: " + confidence.getDepthInBlocks());
         });
-
         // wallet.allowSpendingUnconfirmedTransactions();
 
         // Ready to run. The kit syncs the blockchain and our wallet event
@@ -187,7 +205,7 @@ public class App {
                 case 2:
                     System.out.println("send money to: " + receiveStr);
                     try {
-                        System.out.print(executeCommand("qrencodes -t UTF8 -o - " + receiveStr));
+                        System.out.print(executeCommand("qrencode -t UTF8 -o - " + receiveStr));
                     } catch (final Exception e) {
                         ;
                     }
@@ -211,7 +229,7 @@ public class App {
         // manually want to stop the kit. The WalletAppKit registers a runtime
         // ShutdownHook so we actually do not need to worry about that when our
         // application is stopping.
-        System.out.println("shutting down again");
+        System.out.println("shutting down");
         kit.stopAsync();
         kit.awaitTerminated();
     }
