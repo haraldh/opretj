@@ -1,92 +1,131 @@
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
-  <modelVersion>4.0.0</modelVersion>
-  <parent>
-    <groupId>org.tcpid</groupId>
-    <artifactId>opret-parent</artifactId>
-    <version>0.0.1-SNAPSHOT</version>
-  </parent>
-  <artifactId>opret-testapp</artifactId>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+	<parent>
+		<groupId>org.tcpid</groupId>
+		<artifactId>opret-parent</artifactId>
+		<version>0.0.1-SNAPSHOT</version>
+	</parent>
+	<artifactId>opret-testapp</artifactId>
 
-  
-    <dependencies>
 
-    <dependency>
-      <groupId>org.bitcoinj</groupId>
-      <artifactId>bitcoinj-core</artifactId>
-      <version>0.14.3</version>
-    </dependency>
+	<dependencies>
 
-    <dependency>
-      <groupId>junit</groupId>
-      <artifactId>junit</artifactId>
-      <version>3.8.1</version>
-      <scope>test</scope>
-    </dependency>
+		<dependency>
+			<groupId>org.bitcoinj</groupId>
+			<artifactId>bitcoinj-core</artifactId>
+			<version>0.14.3</version>
+		</dependency>
 
-    <dependency>
-      <groupId>ch.qos.logback</groupId>
-      <artifactId>logback-classic</artifactId>
-      <version>1.0.13</version>
-    </dependency>
+		<dependency>
+			<groupId>junit</groupId>
+			<artifactId>junit</artifactId>
+			<version>3.8.1</version>
+			<scope>test</scope>
+		</dependency>
 
-    <dependency>
-    	<groupId>org.abstractj.kalium</groupId>
-    	<artifactId>kalium</artifactId>
-    	<version>0.5.0</version>
-    </dependency>
+		<dependency>
+			<groupId>ch.qos.logback</groupId>
+			<artifactId>logback-classic</artifactId>
+			<version>1.0.13</version>
+		</dependency>
 
-    <dependency>
-    	<groupId>org.tcpid</groupId>
-    	<artifactId>opretj</artifactId>
-    	<version>0.0.1-SNAPSHOT</version>
-    </dependency>
-        <dependency>
-            <groupId>net.sf.jopt-simple</groupId>
-            <artifactId>jopt-simple</artifactId>
-            <version>4.3</version>
-        </dependency>
+		<dependency>
+			<groupId>org.abstractj.kalium</groupId>
+			<artifactId>kalium</artifactId>
+			<version>0.5.0</version>
+		</dependency>
 
-    </dependencies>
+		<dependency>
+			<groupId>org.tcpid</groupId>
+			<artifactId>opretj</artifactId>
+			<version>0.0.1-SNAPSHOT</version>
+		</dependency>
+		<dependency>
+			<groupId>net.sf.jopt-simple</groupId>
+			<artifactId>jopt-simple</artifactId>
+			<version>4.3</version>
+		</dependency>
 
-  <properties>
-    <maven.compiler.source>1.8</maven.compiler.source>
-    <maven.compiler.target>1.8</maven.compiler.target>
-  </properties>
+	</dependencies>
 
-  <build>
-    <plugins>
-     <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-compiler-plugin</artifactId>
-        <version>3.5.1</version>
-        <configuration>
-            <source>1.8</source>
-            <target>1.8</target>
-        </configuration>
-    </plugin>
-      <plugin>
-        <groupId>org.codehaus.mojo</groupId>
-        <artifactId>exec-maven-plugin</artifactId>
-        <version>1.2.1</version>
-        <configuration>
-          <mainClass>org.tcpid.opretj.testapp.App</mainClass>
-           <systemProperties>
-            <systemProperty>
-              <key>logback.configurationFile</key>
-              <value>${basedir}/opret-testapp/src/main/resources/logback.xml</value>
-            </systemProperty>
-          </systemProperties>
-        </configuration>
-      </plugin>
-    </plugins>
-  </build>
-  
-  <scm>
-  	<url>scm:git:https://github.com/haraldh/opretj.git</url>
-  </scm>
-  <issueManagement>
-  	<url>https://github.com/haraldh/opretj/issues</url>
-  </issueManagement>
-  <name>opretj testapp</name>
-  <url>https://github.com/bitcoinj/bitcoinj</url>
+	<properties>
+		<maven.compiler.source>1.8</maven.compiler.source>
+		<maven.compiler.target>1.8</maven.compiler.target>
+	</properties>
+
+	<build>
+		<plugins>
+			<plugin>
+				<!-- Build an executable JAR -->
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-jar-plugin</artifactId>
+				<version>3.0.2</version>
+				<configuration>
+					<archive>
+						<manifest>
+							<addClasspath>true</addClasspath>
+							<classpathPrefix>lib/</classpathPrefix>
+							<mainClass>org.tcpid.opretj.testapp.App</mainClass>
+						</manifest>
+					</archive>
+				</configuration>
+			</plugin>
+
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-dependency-plugin</artifactId>
+				<version>2.10</version>
+				<executions>
+					<execution>
+						<id>copy-dependencies</id>
+						<phase>package</phase>
+						<goals>
+							<goal>copy-dependencies</goal>
+						</goals>
+						<configuration>
+							<outputDirectory>${project.build.directory}/lib</outputDirectory>
+							<overWriteReleases>false</overWriteReleases>
+							<overWriteSnapshots>false</overWriteSnapshots>
+							<overWriteIfNewer>true</overWriteIfNewer>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-compiler-plugin</artifactId>
+				<version>3.5.1</version>
+				<configuration>
+					<source>1.8</source>
+					<target>1.8</target>
+				</configuration>
+			</plugin>
+			<plugin>
+				<groupId>org.codehaus.mojo</groupId>
+				<artifactId>exec-maven-plugin</artifactId>
+				<version>1.2.1</version>
+				<configuration>
+					<mainClass>org.tcpid.opretj.testapp.App</mainClass>
+					<!-- 
+					<systemProperties>
+						<systemProperty>
+							<key>logback.configurationFile</key>
+							<value>${basedir}/opret-testapp/src/main/resources/logback.xml</value>
+						</systemProperty>
+					</systemProperties>
+					 -->
+				</configuration>
+			</plugin>
+		</plugins>
+	</build>
+
+	<scm>
+		<url>scm:git:https://github.com/haraldh/opretj.git</url>
+	</scm>
+	<issueManagement>
+		<url>https://github.com/haraldh/opretj/issues</url>
+	</issueManagement>
+	<name>opretj testapp</name>
+	<url>https://github.com/bitcoinj/bitcoinj</url>
 </project>
