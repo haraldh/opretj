@@ -20,7 +20,7 @@
 	<logger name="eckey.OPRETSimpleParser" level="debug" />
 	<logger name="eckey.OPRETBaseHandler" level="debug" />
  -->	
-	<root level="warn">
+	<root level="error">
 		<appender-ref ref="STDOUT" />
 	</root>
 </configuration>

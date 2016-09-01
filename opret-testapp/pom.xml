@@ -10,7 +10,6 @@
 
 
 	<dependencies>
-
 		<dependency>
 			<groupId>org.bitcoinj</groupId>
 			<artifactId>bitcoinj-core</artifactId>
@@ -47,6 +46,11 @@
 			<version>4.3</version>
 		</dependency>
 
+		<dependency>
+			<groupId>jline</groupId>
+			<artifactId>jline</artifactId>
+			<version>2.12</version>
+		</dependency>
 	</dependencies>
 
 	<properties>
@@ -107,14 +111,9 @@
 				<version>1.2.1</version>
 				<configuration>
 					<mainClass>org.tcpid.opretj.testapp.App</mainClass>
-					<!-- 
-					<systemProperties>
-						<systemProperty>
-							<key>logback.configurationFile</key>
-							<value>${basedir}/opret-testapp/src/main/resources/logback.xml</value>
-						</systemProperty>
-					</systemProperties>
-					 -->
+					<!-- <systemProperties> <systemProperty> <key>logback.configurationFile</key> 
+						<value>${basedir}/opret-testapp/src/main/resources/logback.xml</value> </systemProperty> 
+						</systemProperties> -->
 				</configuration>
 			</plugin>
 		</plugins>

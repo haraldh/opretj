@@ -4,11 +4,15 @@ import static org.bitcoinj.script.ScriptOpCodes.OP_RETURN;
 
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.PrintWriter;
 import java.util.Arrays;
-import java.util.InputMismatchException;
-import java.util.Scanner;
 
+import org.abstractj.kalium.crypto.Box;
+import org.abstractj.kalium.crypto.Hash;
+import org.abstractj.kalium.keys.KeyPair;
+import org.abstractj.kalium.keys.PublicKey;
 import org.abstractj.kalium.keys.SigningKey;
 import org.abstractj.kalium.keys.VerifyKey;
 import org.bitcoinj.core.Coin;
@@ -34,6 +38,8 @@ import org.tcpid.opretj.OPRETWalletAppKit;
 import com.google.common.primitives.Bytes;
 import com.google.common.util.concurrent.Service;
 
+import jline.console.ConsoleReader;
+import jline.console.completer.StringsCompleter;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
 import joptsimple.OptionSpec;
@@ -65,6 +71,78 @@ public class App {
         }
     }
 
+    private static boolean cryptoSelfTest() {
+        final KeyPair MKpair = new KeyPair();
+        final KeyPair VKpair = new KeyPair();
+        final byte[] nonce = Arrays.copyOfRange(Sha256Hash.hash("TEST".getBytes()), 0, 8);
+        final byte[] cipher = doubleEnc(MKpair, VKpair, "TEST".getBytes(), nonce);
+        // System.err.println("Cipher len: " + cipher.length);
+        final byte[] chk = doubleDec(MKpair.getPublicKey(), VKpair.getPublicKey(), cipher, nonce);
+        return Arrays.equals(chk, "TEST".getBytes());
+    }
+
+    private static void displayBalance(final OPRETWalletAppKit kit, final PrintWriter out) {
+        out.write("Balance: " + kit.wallet().getBalance().toFriendlyString() + "\n");
+        out.flush();
+    }
+
+    private static void displayHelp(PrintWriter out) {
+        out.write("Available Commands:\n");
+        out.write("\n");
+        out.write("help            - this screen\n");
+        out.write("quit            - exit the application\n");
+        out.write("balance         - show your available balance\n");
+        out.write("receive         - display an address to receive coins\n");
+        out.write("empty <address> - send all coins to the address\n");
+        out.write("opret           - send opret\n");
+        out.write("\n");
+
+        out.flush();
+    }
+
+    private static byte[] doubleDec(final PublicKey MK, final PublicKey VK, final byte[] cipher, final byte[] nonce) {
+        final Hash h = new Hash();
+
+        final KeyPair Epair = new KeyPair(
+                Arrays.copyOfRange(h.blake2(Bytes.concat(nonce, VK.toBytes(), MK.toBytes())), 0, 32));
+
+        final Box boxVK = new Box(VK.toBytes(), Epair.getPrivateKey().toBytes());
+        final byte[] nonceVK = Arrays
+                .copyOfRange(h.blake2(Bytes.concat(nonce, Epair.getPrivateKey().toBytes(), VK.toBytes())), 0, 24);
+
+        final byte[] cipherMK = boxVK.decrypt(nonceVK, cipher);
+
+        final Box boxMK = new Box(MK.toBytes(), Epair.getPrivateKey().toBytes());
+
+        final byte[] nonceMK = Arrays
+                .copyOfRange(h.blake2(Bytes.concat(nonce, Epair.getPrivateKey().toBytes(), MK.toBytes())), 0, 24);
+
+        final byte[] clear = boxMK.decrypt(nonceMK, cipherMK);
+
+        return clear;
+    }
+
+    private static byte[] doubleEnc(final KeyPair MKpair, final KeyPair VKpair, final byte[] clear,
+            final byte[] nonce) {
+        final Hash h = new Hash();
+
+        final KeyPair Epair = new KeyPair(Arrays.copyOfRange(
+                h.blake2(Bytes.concat(nonce, VKpair.getPublicKey().toBytes(), MKpair.getPublicKey().toBytes())), 0,
+                32));
+
+        final Box boxMK = new Box(Epair.getPublicKey().toBytes(), MKpair.getPrivateKey().toBytes());
+        final byte[] nonceMK = Arrays.copyOfRange(
+                h.blake2(Bytes.concat(nonce, Epair.getPrivateKey().toBytes(), MKpair.getPublicKey().toBytes())), 0, 24);
+
+        final byte[] cipherMK = boxMK.encrypt(nonceMK, clear);
+
+        final Box boxVK = new Box(Epair.getPublicKey().toBytes(), VKpair.getPrivateKey().toBytes());
+        final byte[] nonceVK = Arrays.copyOfRange(
+                h.blake2(Bytes.concat(nonce, Epair.getPrivateKey().toBytes(), VKpair.getPublicKey().toBytes())), 0, 24);
+        final byte[] cipherVK = boxVK.encrypt(nonceVK, cipherMK);
+        return cipherVK;
+    }
+
     private static String executeCommand(final String command) {
 
         final StringBuffer output = new StringBuffer();
@@ -88,17 +166,81 @@ public class App {
 
     }
 
+    private static void handleConsole(final OPRETWalletAppKit kit) throws IOException {
+        final String receiveStr = kit.wallet().freshReceiveAddress().toString();
+        final ConsoleReader reader = new ConsoleReader();
+        final String[] cmds = { "help", "quit", "exit", "balance", "receive", "empty", "opret" };
+        reader.addCompleter(new StringsCompleter(cmds));
+        final PrintWriter out = new PrintWriter(reader.getOutput());
+        reader.setPrompt("opret> ");
+        String line;
+        displayHelp(out);
+        displayBalance(kit, out);
+
+        while ((line = reader.readLine()) != null) {
+            final String[] argv = line.split("\\s");
+            if (argv.length == 0) {
+                continue;
+            }
+
+            final String cmd = argv[0];
+            final String args[] = Arrays.copyOfRange(argv, 1, argv.length);
+
+            switch (cmd.toLowerCase()) {
+            case "quit":
+                return;
+            case "help":
+                displayHelp(out);
+                break;
+            case "balance":
+                displayBalance(kit, out);
+                break;
+            case "receive":
+                out.write("send money to: " + receiveStr + "\n");
+                try {
+                    out.write(executeCommand("qrencode -t UTF8 -o - " + receiveStr));
+                } catch (final Exception e) {
+                    ;
+                }
+                out.flush();
+                break;
+            case "empty":
+                if (args.length != 1) {
+                    out.println("empty needs a receive address!");
+                    continue;
+                }
+                break;
+            case "opret":
+                sendOPReturn(kit, out);
+                break;
+            }
+        }
+    }
+
     public static void main(final String[] args) throws Exception {
+
+        final boolean chk = cryptoSelfTest();
+        if (chk) {
+            System.err.println("Crypto self test: PASSED");
+        } else {
+            System.err.println("Crypto self test: FAILED");
+            System.exit(-1);
+        }
+
         final OptionParser parser = new OptionParser();
         final OptionSpec<NetworkEnum> net = parser.accepts("net", "The network to run the examples on")
                 .withRequiredArg().ofType(NetworkEnum.class).defaultsTo(NetworkEnum.TEST);
         parser.accepts("help", "Displays program options");
         final OptionSet opts = parser.parse(args);
-        if (opts.has("help") || !opts.has(net)) {
+        if (opts.has("help")) {
             System.err.println("usage: App --net=MAIN/TEST/REGTEST");
             parser.printHelpOn(System.err);
             return;
         }
+        if (!opts.has(net)) {
+            System.err.println("No net specified, using TestNet!");
+        }
+
         final NetworkParameters params = net.value(opts).get();
 
         final OPRETECParser bs = new OPRETECParser();
@@ -119,12 +261,6 @@ public class App {
         // bs.addOPRET(Utils.HEX.decode("0f490dee643b01b06e0ea84c253a90050a3543cfb7c74319fb47b04afee5b872"),
         // earliestTime);
 
-        // Now we initialize a new WalletAppKit. The kit handles all the
-        // boilerplate for us and is the easiest way to get everything up and
-        // running.
-        // Have a look at the WalletAppKit documentation and its source to
-        // understand what's happening behind the scenes:
-        // https://github.com/bitcoinj/bitcoinj/blob/master/core/src/main/java/org/bitcoinj/kits/WalletAppKit.java
         final OPRETWalletAppKit kit = new OPRETWalletAppKit(params, new File("."), "opretwallet" + params.getId(), bs);
 
         kit.addListener(new Service.Listener() {
@@ -135,20 +271,14 @@ public class App {
             }
         }, Threading.SAME_THREAD);
 
-        // In case you want to connect with your local bitcoind tell the kit to
-        // connect to localhost.
-        // You must do that in reg test mode.
         if (params.getId().equals(NetworkParameters.ID_REGTEST)) {
             kit.connectToLocalHost();
         }
         kit.setCheckpoints(App.class.getResourceAsStream("/" + params.getId() + ".checkpoints"));
-        // Now we start the kit and sync the blockchain.
-        // bitcoinj is working a lot with the Google Guava libraries. The
-        // WalletAppKit extends the AbstractIdleService. Have a look at the
-        // introduction to Guava services:
-        // https://github.com/google/guava/wiki/ServiceExplained
         kit.startAsync();
+
         System.out.println("Please wait for the blockchain to be downloaded!");
+
         try {
             kit.awaitRunning();
         } catch (final Exception e) {
@@ -166,75 +296,29 @@ public class App {
             System.out.println("received: " + tx.getValue(wallet1));
         });
 
-        wallet.addCoinsSentEventListener((wallet1, tx, prevBalance, newBalance) -> System.out.println("coins sent"));
+        wallet.addCoinsSentEventListener(Threading.SAME_THREAD,
+                (wallet1, tx, prevBalance, newBalance) -> System.out.println("coins sent"));
 
-        wallet.addKeyChainEventListener(keys -> System.out.println("new key added"));
+        wallet.addKeyChainEventListener(Threading.SAME_THREAD, keys -> System.out.println("new key added"));
 
-        wallet.addScriptsChangeEventListener(
+        wallet.addScriptChangeEventListener(Threading.SAME_THREAD,
                 (wallet1, scripts, isAddingScripts) -> System.out.println("new script added"));
 
-        wallet.addTransactionConfidenceEventListener((wallet1, tx) -> {
+        wallet.addTransactionConfidenceEventListener(Threading.SAME_THREAD, (wallet1, tx) -> {
             System.out.println("-----> confidence changed: " + tx.getHashAsString());
             final TransactionConfidence confidence = tx.getConfidence();
             System.out.println("new block depth: " + confidence.getDepthInBlocks());
         });
         // wallet.allowSpendingUnconfirmedTransactions();
 
-        // Ready to run. The kit syncs the blockchain and our wallet event
-        // listener gets notified when something happens.
-        // To test everything we create and print a fresh receiving address.
-        // Send some coins to that address and see if everything works.
-        final String receiveStr = wallet.freshReceiveAddress().toString();
-        final Scanner input = new Scanner(System.in);
+        handleConsole(kit);
 
-        display: while (true) {
-
-            System.out.println("-- Actions --");
-            System.out.println("Select an option: \n" + "  0) QUIT\n" + "  1) Display Balance\n"
-                    + "  2) Display Receive Address\n" + "  3) Send OP_Return\n");
-            try {
-                final int selection = input.nextInt();
-
-                switch (selection) {
-                case 0:
-                    System.out.println("Returning...");
-                    break display;
-                case 1:
-                    System.out.println("Balance: " + wallet.getBalance().toFriendlyString());
-                    break;
-                case 2:
-                    System.out.println("send money to: " + receiveStr);
-                    try {
-                        System.out.print(executeCommand("qrencode -t UTF8 -o - " + receiveStr));
-                    } catch (final Exception e) {
-                        ;
-                    }
-                    break;
-                case 3:
-                    sendOPReturn(kit);
-                    break;
-                default:
-                    System.out.println("Invalid action.");
-                    break;
-                }
-            } catch (final InputMismatchException e) {
-                ;
-            }
-            input.nextLine();
-
-        }
-        input.close();
-
-        // Make sure to properly shut down all the running services when you
-        // manually want to stop the kit. The WalletAppKit registers a runtime
-        // ShutdownHook so we actually do not need to worry about that when our
-        // application is stopping.
         System.out.println("shutting down");
         kit.stopAsync();
         kit.awaitTerminated();
     }
 
-    private static boolean sendOPReturn(final OPRETWalletAppKit kit) {
+    private static boolean sendOPReturn(final OPRETWalletAppKit kit, PrintWriter output) {
         final OPRETWallet wallet = kit.opretwallet();
         final NetworkParameters params = wallet.getNetworkParameters();
 
@@ -252,8 +336,8 @@ public class App {
         try {
             sr = wallet.sendCoins(request);
         } catch (final InsufficientMoneyException e) {
-            // TODO Auto-generated catch block
-            e.printStackTrace();
+            output.println(e.getLocalizedMessage());
+            output.flush();
             return false;
         }
         logger.debug("SendRequest {}", request);
@@ -277,8 +361,8 @@ public class App {
         try {
             sr = wallet.sendCoins(request);
         } catch (final InsufficientMoneyException e) {
-            // TODO Auto-generated catch block
-            e.printStackTrace();
+            output.println(e.getLocalizedMessage());
+            output.flush();
             return false;
         }
 

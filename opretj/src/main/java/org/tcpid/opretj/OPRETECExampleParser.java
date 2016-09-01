@@ -17,8 +17,8 @@ import org.slf4j.LoggerFactory;
 
 import com.google.common.primitives.Bytes;
 
-public class OPRETECParser extends OPRETBaseHandler {
-    private static final Logger logger = LoggerFactory.getLogger(OPRETECParser.class);
+public class OPRETECExampleParser extends OPRETBaseHandler {
+    private static final Logger logger = LoggerFactory.getLogger(OPRETECExampleParser.class);
     private static final List<Byte> OPRET_MAGIC = Bytes.asList(Utils.HEX.decode("ec1d"));
     protected final Map<Sha256Hash, PartialMerkleTree> merkleHashMap = new HashMap<>();
     protected final Map<Sha256Hash, OPRETTransaction> transHashMap = new HashMap<>();

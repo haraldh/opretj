@@ -30,8 +30,12 @@ public class OPRETWalletAppKit extends WalletAppKit {
         // TODO: remove
         wallet.reset();
         peerGroup().addBlocksDownloadedEventListener(wallet);
+        // setupCompleted();
     }
 
+    /*
+     * public ListenableFuture setupCompleted() { return; }
+     */
     public OPRETWallet opretwallet() throws RuntimeException, IllegalStateException {
         checkState((state() == State.STARTING) || (state() == State.RUNNING), "Cannot call until startup is complete");
         final Wallet w = wallet();
