@@ -7,7 +7,16 @@
 		<version>0.0.1-SNAPSHOT</version>
 	</parent>
 	<artifactId>opret-testapp</artifactId>
-
+<repositories>
+    <repository>
+        <id>oss-sonatype</id>
+        <name>oss-sonatype</name>
+        <url>https://oss.sonatype.org/content/repositories/snapshots/</url>
+        <snapshots>
+            <enabled>true</enabled>
+        </snapshots>
+    </repository>
+</repositories>
 
 	<dependencies>
 		<dependency>
@@ -29,11 +38,12 @@
 			<version>1.0.13</version>
 		</dependency>
 
-		<dependency>
-			<groupId>org.abstractj.kalium</groupId>
-			<artifactId>kalium</artifactId>
-			<version>0.5.0</version>
-		</dependency>
+<dependency>
+  <groupId>com.github.joshjdevl.libsodiumjni</groupId>
+  <artifactId>libsodium-jni</artifactId>
+  <version>1.0.2-SNAPSHOT</version>
+  <type>jar</type>
+</dependency>
 
 		<dependency>
 			<groupId>org.tcpid</groupId>

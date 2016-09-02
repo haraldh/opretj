@@ -1,34 +1,33 @@
 package org.tcpid.opretj.testapp;
 
 import static org.bitcoinj.script.ScriptOpCodes.OP_RETURN;
+import static org.libsodium.jni.SodiumConstants.NONCE_BYTES;
+import static org.libsodium.jni.SodiumConstants.SECRETKEY_BYTES;
 
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.util.Arrays;
 
-import org.abstractj.kalium.crypto.Box;
-import org.abstractj.kalium.crypto.Hash;
-import org.abstractj.kalium.keys.KeyPair;
-import org.abstractj.kalium.keys.PublicKey;
-import org.abstractj.kalium.keys.SigningKey;
-import org.abstractj.kalium.keys.VerifyKey;
+import org.bitcoinj.core.Address;
+import org.bitcoinj.core.AddressFormatException;
 import org.bitcoinj.core.Coin;
 import org.bitcoinj.core.InsufficientMoneyException;
 import org.bitcoinj.core.NetworkParameters;
 import org.bitcoinj.core.Sha256Hash;
 import org.bitcoinj.core.Transaction;
-import org.bitcoinj.core.TransactionConfidence;
-import org.bitcoinj.core.TransactionOutput;
 import org.bitcoinj.core.Utils;
 import org.bitcoinj.script.Script;
 import org.bitcoinj.script.ScriptBuilder;
 import org.bitcoinj.utils.Threading;
-import org.bitcoinj.wallet.KeyChain.KeyPurpose;
 import org.bitcoinj.wallet.SendRequest;
-import org.bitcoinj.wallet.Wallet.SendResult;
+import org.libsodium.jni.crypto.Box;
+import org.libsodium.jni.crypto.Hash;
+import org.libsodium.jni.keys.KeyPair;
+import org.libsodium.jni.keys.PublicKey;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.tcpid.opretj.OPRETECParser;
@@ -45,40 +44,46 @@ import joptsimple.OptionSet;
 import joptsimple.OptionSpec;
 
 public class App {
-    private static final Logger logger = LoggerFactory.getLogger(App.class);
+    public static final Hash HASH = new Hash();
+    public final static long OPRET_BIRTHDAY = 1471989600;
 
-    public static final long OPRET_BIRTHDAY = 1471989600;
-    static byte[] rawKey = Sha256Hash.hash("TESTSEED".getBytes());
-    static SigningKey sk = new SigningKey(rawKey);
-    static VerifyKey v = sk.getVerifyKey();
-    private static byte[] pkhash = Sha256Hash.hash(v.toBytes());
-    static byte[] revokemsg = Bytes.concat("Revoke ".getBytes(), pkhash);
+    private final static Logger logger = LoggerFactory.getLogger(App.class);
+    private final static SigningKey SK = new SigningKey(HASH.sha256("TESTSEED".getBytes()));
+    private final static VerifyKey VK = SK.getVerifyKey();
+    private final static byte[] PKHASH = HASH.sha256(VK.toBytes());
+    private final static byte[] REVOKEMSG = Bytes.concat("Revoke ".getBytes(), PKHASH);
 
     public static void checkKey(final byte[] pkhash, final byte[] sig) {
-        logger.warn("CHECKING REVOKE PK {} - SIG {}", Utils.HEX.encode(pkhash), Utils.HEX.encode(sig));
+        logger.warn("CHECKING REVOKE PKHASH {} - SIG {}", Utils.HEX.encode(pkhash), Utils.HEX.encode(sig));
 
-        if (!Arrays.equals(App.pkhash, pkhash)) {
+        if (!Arrays.equals(Arrays.copyOfRange(App.PKHASH, 0, 12), pkhash)) {
             logger.warn("Unknown PK {}", Utils.HEX.encode(pkhash));
             return;
         }
 
-        logger.warn("Using VerifyKey {}", v);
+        logger.warn("Using VerifyKey {}", VK);
 
-        if (v.verify(revokemsg, sig)) {
-            logger.warn("REVOKED VerifyKey {}", v);
+        if (VK.verify(REVOKEMSG, sig)) {
+            logger.warn("REVOKED VerifyKey {}", VK);
         } else {
             logger.warn("SIGNATURE does not match!");
         }
     }
 
     private static boolean cryptoSelfTest() {
-        final KeyPair MKpair = new KeyPair();
-        final KeyPair VKpair = new KeyPair();
+        final SigningKey msk = new SigningKey();
+
+        final KeyPair mkpair = msk.getKeyPair();
+        final KeyPair vkpair = SK.getKeyPair();
         final byte[] nonce = Arrays.copyOfRange(Sha256Hash.hash("TEST".getBytes()), 0, 8);
-        final byte[] cipher = doubleEnc(MKpair, VKpair, "TEST".getBytes(), nonce);
+        final byte[] cipher = doubleEnc(mkpair, vkpair, "TEST".getBytes(), nonce);
         // System.err.println("Cipher len: " + cipher.length);
-        final byte[] chk = doubleDec(MKpair.getPublicKey(), VKpair.getPublicKey(), cipher, nonce);
-        return Arrays.equals(chk, "TEST".getBytes());
+        try {
+            final byte[] chk = doubleDec(msk.getVerifyKey().getPublicKey(), VK.getPublicKey(), cipher, nonce);
+            return Arrays.equals(chk, "TEST".getBytes());
+        } catch (final Exception e) {
+            return false;
+        }
     }
 
     private static void displayBalance(final OPRETWalletAppKit kit, final PrintWriter out) {
@@ -101,21 +106,21 @@ public class App {
     }
 
     private static byte[] doubleDec(final PublicKey MK, final PublicKey VK, final byte[] cipher, final byte[] nonce) {
-        final Hash h = new Hash();
 
         final KeyPair Epair = new KeyPair(
-                Arrays.copyOfRange(h.blake2(Bytes.concat(nonce, VK.toBytes(), MK.toBytes())), 0, 32));
+                Arrays.copyOfRange(HASH.sha256(Bytes.concat(nonce, VK.toBytes(), MK.toBytes())), 0, SECRETKEY_BYTES));
 
-        final Box boxVK = new Box(VK.toBytes(), Epair.getPrivateKey().toBytes());
-        final byte[] nonceVK = Arrays
-                .copyOfRange(h.blake2(Bytes.concat(nonce, Epair.getPrivateKey().toBytes(), VK.toBytes())), 0, 24);
+        final Box boxVK = new Box(VK, Epair.getPrivateKey());
+
+        final byte[] nonceVK = Arrays.copyOfRange(
+                HASH.sha256(Bytes.concat(nonce, Epair.getPrivateKey().toBytes(), VK.toBytes())), 0, NONCE_BYTES);
 
         final byte[] cipherMK = boxVK.decrypt(nonceVK, cipher);
 
-        final Box boxMK = new Box(MK.toBytes(), Epair.getPrivateKey().toBytes());
+        final Box boxMK = new Box(MK, Epair.getPrivateKey());
 
-        final byte[] nonceMK = Arrays
-                .copyOfRange(h.blake2(Bytes.concat(nonce, Epair.getPrivateKey().toBytes(), MK.toBytes())), 0, 24);
+        final byte[] nonceMK = Arrays.copyOfRange(
+                HASH.sha256(Bytes.concat(nonce, Epair.getPrivateKey().toBytes(), MK.toBytes())), 0, NONCE_BYTES);
 
         final byte[] clear = boxMK.decrypt(nonceMK, cipherMK);
 
@@ -124,22 +129,27 @@ public class App {
 
     private static byte[] doubleEnc(final KeyPair MKpair, final KeyPair VKpair, final byte[] clear,
             final byte[] nonce) {
-        final Hash h = new Hash();
 
         final KeyPair Epair = new KeyPair(Arrays.copyOfRange(
-                h.blake2(Bytes.concat(nonce, VKpair.getPublicKey().toBytes(), MKpair.getPublicKey().toBytes())), 0,
-                32));
+                HASH.sha256(Bytes.concat(nonce, VKpair.getPublicKey().toBytes(), MKpair.getPublicKey().toBytes())), 0,
+                SECRETKEY_BYTES));
 
-        final Box boxMK = new Box(Epair.getPublicKey().toBytes(), MKpair.getPrivateKey().toBytes());
+        final Box boxMK = new Box(Epair.getPublicKey(), MKpair.getPrivateKey());
+
         final byte[] nonceMK = Arrays.copyOfRange(
-                h.blake2(Bytes.concat(nonce, Epair.getPrivateKey().toBytes(), MKpair.getPublicKey().toBytes())), 0, 24);
+                HASH.sha256(Bytes.concat(nonce, Epair.getPrivateKey().toBytes(), MKpair.getPublicKey().toBytes())), 0,
+                NONCE_BYTES);
 
         final byte[] cipherMK = boxMK.encrypt(nonceMK, clear);
 
-        final Box boxVK = new Box(Epair.getPublicKey().toBytes(), VKpair.getPrivateKey().toBytes());
+        final Box boxVK = new Box(Epair.getPublicKey(), VKpair.getPrivateKey());
+
         final byte[] nonceVK = Arrays.copyOfRange(
-                h.blake2(Bytes.concat(nonce, Epair.getPrivateKey().toBytes(), VKpair.getPublicKey().toBytes())), 0, 24);
+                HASH.sha256(Bytes.concat(nonce, Epair.getPrivateKey().toBytes(), VKpair.getPublicKey().toBytes())), 0,
+                NONCE_BYTES);
+
         final byte[] cipherVK = boxVK.encrypt(nonceVK, cipherMK);
+
         return cipherVK;
     }
 
@@ -167,7 +177,6 @@ public class App {
     }
 
     private static void handleConsole(final OPRETWalletAppKit kit) throws IOException {
-        final String receiveStr = kit.wallet().freshReceiveAddress().toString();
         final ConsoleReader reader = new ConsoleReader();
         final String[] cmds = { "help", "quit", "exit", "balance", "receive", "empty", "opret" };
         reader.addCompleter(new StringsCompleter(cmds));
@@ -178,13 +187,17 @@ public class App {
         displayBalance(kit, out);
 
         while ((line = reader.readLine()) != null) {
-            final String[] argv = line.split("\\s");
+            String[] argv = line.split("\\s");
             if (argv.length == 0) {
                 continue;
             }
 
             final String cmd = argv[0];
-            final String args[] = Arrays.copyOfRange(argv, 1, argv.length);
+            if (cmd.isEmpty()) {
+                continue;
+            }
+
+            argv = Arrays.copyOfRange(argv, 1, argv.length);
 
             switch (cmd.toLowerCase()) {
             case "quit":
@@ -196,6 +209,8 @@ public class App {
                 displayBalance(kit, out);
                 break;
             case "receive":
+                final String receiveStr = kit.wallet().freshReceiveAddress().toString();
+
                 out.write("send money to: " + receiveStr + "\n");
                 try {
                     out.write(executeCommand("qrencode -t UTF8 -o - " + receiveStr));
@@ -205,13 +220,30 @@ public class App {
                 out.flush();
                 break;
             case "empty":
-                if (args.length != 1) {
-                    out.println("empty needs a receive address!");
+                if (argv.length != 1) {
+                    out.println("'empty <address>' needs a valid receive address!");
                     continue;
+                }
+                out.println("'" + argv[0] + "'");
+                out.flush();
+                try {
+                    final SendRequest request = SendRequest.emptyWallet(Address.fromBase58(kit.params(), argv[0]));
+                    try {
+                        kit.wallet().sendCoins(request);
+                    } catch (final InsufficientMoneyException e) {
+                        out.println(e.getLocalizedMessage());
+                        out.flush();
+                    }
+                } catch (final AddressFormatException e) {
+                    out.println(e.getLocalizedMessage());
+                    out.flush();
                 }
                 break;
             case "opret":
                 sendOPReturn(kit, out);
+                break;
+            default:
+                out.println("Unknown command. Use 'help' to display available commands.");
                 break;
             }
         }
@@ -256,7 +288,7 @@ public class App {
             earliestTime = Utils.currentTimeSeconds();
         }
 
-        bs.addOPRET(pkhash, earliestTime);
+        bs.addOPRET(Arrays.copyOfRange(App.PKHASH, 0, 12), earliestTime);
         // bs.addOPRET(Sha256Hash.hash("test1".getBytes()), earliestTime);
         // bs.addOPRET(Utils.HEX.decode("0f490dee643b01b06e0ea84c253a90050a3543cfb7c74319fb47b04afee5b872"),
         // earliestTime);
@@ -274,7 +306,10 @@ public class App {
         if (params.getId().equals(NetworkParameters.ID_REGTEST)) {
             kit.connectToLocalHost();
         }
-        kit.setCheckpoints(App.class.getResourceAsStream("/" + params.getId() + ".checkpoints"));
+        final InputStream is = App.class.getResourceAsStream("/" + params.getId() + ".checkpoints");
+        if (is != null) {
+            kit.setCheckpoints(is);
+        }
         kit.startAsync();
 
         System.out.println("Please wait for the blockchain to be downloaded!");
@@ -292,23 +327,40 @@ public class App {
         final OPRETWallet wallet = kit.opretwallet();
 
         wallet.addCoinsReceivedEventListener((wallet1, tx, prevBalance, newBalance) -> {
-            System.out.println("-----> coins resceived: " + tx.getHashAsString());
-            System.out.println("received: " + tx.getValue(wallet1));
+            final Coin c = tx.getValue(wallet1);
+
+            if (c.isPositive()) {
+                System.out.println("-----> coins received: " + tx.getHashAsString());
+                System.out.println("received: " + c);
+            } else {
+                System.out.println("-----> coins sent: " + tx.getHashAsString());
+                System.out.println("sent: " + c.negate().toFriendlyString());
+            }
         });
 
-        wallet.addCoinsSentEventListener(Threading.SAME_THREAD,
-                (wallet1, tx, prevBalance, newBalance) -> System.out.println("coins sent"));
-
-        wallet.addKeyChainEventListener(Threading.SAME_THREAD, keys -> System.out.println("new key added"));
-
-        wallet.addScriptChangeEventListener(Threading.SAME_THREAD,
-                (wallet1, scripts, isAddingScripts) -> System.out.println("new script added"));
-
-        wallet.addTransactionConfidenceEventListener(Threading.SAME_THREAD, (wallet1, tx) -> {
-            System.out.println("-----> confidence changed: " + tx.getHashAsString());
-            final TransactionConfidence confidence = tx.getConfidence();
-            System.out.println("new block depth: " + confidence.getDepthInBlocks());
-        });
+        /*
+         * wallet.addCoinsSentEventListener(Threading.SAME_THREAD, (wallet1, tx,
+         * prevBalance, newBalance) -> { final Coin c = tx.getValue(wallet1);
+         *
+         * if (c.isPositive()) { System.out.println("-----> coins received: " +
+         * tx.getHashAsString()); System.out.println("received: " + c); } else {
+         * System.out.println("-----> coins sent: " + tx.getHashAsString());
+         * System.out.println("sent: " + c.negate().toFriendlyString()); }
+         *
+         * });
+         *
+         * wallet.addKeyChainEventListener(Threading.SAME_THREAD, keys ->
+         * System.out.println("new key added"));
+         *
+         * wallet.addScriptChangeEventListener(Threading.SAME_THREAD, (wallet1,
+         * scripts, isAddingScripts) -> System.out.println("new script added"));
+         *
+         * wallet.addTransactionConfidenceEventListener(Threading.SAME_THREAD,
+         * (wallet1, tx) -> { System.out.println("-----> confidence changed: " +
+         * tx.getHashAsString()); final TransactionConfidence confidence =
+         * tx.getConfidence(); System.out.println("new block depth: " +
+         * confidence.getDepthInBlocks()); });
+         */
         // wallet.allowSpendingUnconfirmedTransactions();
 
         handleConsole(kit);
@@ -322,44 +374,17 @@ public class App {
         final OPRETWallet wallet = kit.opretwallet();
         final NetworkParameters params = wallet.getNetworkParameters();
 
-        Transaction t = new Transaction(params);
-        final byte[] sig = sk.sign(revokemsg);
+        final Transaction t = new Transaction(params);
+        final byte[] sig = SK.sign(REVOKEMSG);
 
-        Script script = new ScriptBuilder().op(OP_RETURN).data(Utils.HEX.decode("ec1d")).data(Utils.HEX.decode("fe"))
-                .data(pkhash).data(Arrays.copyOfRange(sig, 0, 32)).build();
+        final Script script = new ScriptBuilder().op(OP_RETURN).data(Utils.HEX.decode("ec0f")).data(sig)
+                .data(Arrays.copyOfRange(PKHASH, 0, 12)).build();
         t.addOutput(Coin.ZERO, script);
-        t.addOutput(Transaction.DEFAULT_TX_FEE, wallet.freshAddress(KeyPurpose.CHANGE));
-        SendRequest request = SendRequest.forTx(t);
+        final SendRequest request = SendRequest.forTx(t);
         request.ensureMinRequiredFee = true;
-        SendResult sr = null;
-
+        request.shuffleOutputs = false;
         try {
-            sr = wallet.sendCoins(request);
-        } catch (final InsufficientMoneyException e) {
-            output.println(e.getLocalizedMessage());
-            output.flush();
-            return false;
-        }
-        logger.debug("SendRequest {}", request);
-
-        script = new ScriptBuilder().op(OP_RETURN).data(Utils.HEX.decode("ec1d")).data(Utils.HEX.decode("ff"))
-                .data(pkhash).data(Arrays.copyOfRange(sig, 32, 64)).build();
-        t = new Transaction(params);
-
-        for (final TransactionOutput out : sr.tx.getOutputs()) {
-            if (out.getValue().compareTo(Transaction.DEFAULT_TX_FEE) == 0) {
-                logger.debug("Add Output: {} of value {}", out, out.getValue());
-                t.addInput(out);
-            }
-        }
-
-        t.addOutput(Coin.ZERO, script);
-        request = SendRequest.forTx(t);
-        request.ensureMinRequiredFee = true;
-        sr = null;
-
-        try {
-            sr = wallet.sendCoins(request);
+            wallet.sendCoins(request);
         } catch (final InsufficientMoneyException e) {
             output.println(e.getLocalizedMessage());
             output.flush();

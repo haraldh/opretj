@@ -19,7 +19,7 @@ import com.google.common.primitives.Bytes;
 
 public class OPRETECParser extends OPRETBaseHandler {
     private static final Logger logger = LoggerFactory.getLogger(OPRETECParser.class);
-    private static final List<Byte> OPRET_MAGIC = Bytes.asList(Utils.HEX.decode("ec1d"));
+    private static final List<Byte> OPRET_MAGIC = Bytes.asList(Utils.HEX.decode("ec0f"));
     protected final Map<Sha256Hash, PartialMerkleTree> merkleHashMap = new HashMap<>();
     protected final Map<Sha256Hash, OPRETTransaction> transHashMap = new HashMap<>();
     private final CopyOnWriteArrayList<ListenerRegistration<OPRETECEventListener>> opReturnChangeListeners = new CopyOnWriteArrayList<>();
@@ -31,59 +31,43 @@ public class OPRETECParser extends OPRETBaseHandler {
      */
     public void addOPRETECRevokeEventListener(final OPRETECEventListener listener) {
         // This is thread safe, so we don't need to take the lock.
-        opReturnChangeListeners
-                .add(new ListenerRegistration<OPRETECEventListener>(listener, Threading.SAME_THREAD));
+        opReturnChangeListeners.add(new ListenerRegistration<OPRETECEventListener>(listener, Threading.SAME_THREAD));
     }
 
-    private boolean checkData(final OPRETTransaction t1, final OPRETTransaction t2) {
-        final List<List<Byte>> opret_data = new ArrayList<>(t1.opretData);
-        opret_data.addAll(t2.opretData);
+    private boolean checkData(final OPRETTransaction t) {
+        final List<List<Byte>> opret_data = new ArrayList<>(t.opretData);
         logger.debug("checking {}", opret_data);
+
+        if (opret_data.size() != 3) {
+            return false;
+        }
 
         List<Byte> chunk;
         chunk = opret_data.get(0);
         if (!chunk.equals(OPRET_MAGIC)) {
-            logger.debug("0: != OPRET_MAGIC");
+            logger.debug("chunk 0: != OPRET_MAGIC");
             return false;
         }
 
         chunk = opret_data.get(1);
-        if (chunk.size() != 1) {
-            logger.debug("1: size != 1");
+        if ((chunk.size() != 64)) {
+            logger.debug("chunk 1 size != 64, but {}", chunk.size());
             return false;
         }
 
-        if (chunk.get(0) == (byte) 0xFE) {
-            if (opret_data.size() != 8) {
-                logger.debug("FE: size != 8");
-                return false;
-            }
-            chunk = opret_data.get(4);
-            if (!chunk.equals(OPRET_MAGIC)) {
-                logger.debug("FE 4 != OPRET_MAGIC");
-                return false;
-            }
-            if (!opret_data.get(2).equals(opret_data.get(6))) {
-                logger.debug("FE 2 != 6");
-                return false;
-            }
-            chunk = opret_data.get(5);
-            if ((chunk.size() != 1) || (chunk.get(0) != (byte) 0xFF)) {
-                logger.debug("FE 5 size!=1 or != FF");
-                return false;
-            }
-
-            return handleRevoke(t1, t2);
-        } else {
-            logger.debug("1: != 0xFE");
+        chunk = opret_data.get(2);
+        if ((chunk.size() != 12)) {
+            logger.debug("chunk 2 size!= 12 but {} ", chunk.size());
+            return false;
         }
 
-        return false;
+        return handleRevoke(t);
+
     }
 
-    private boolean handleRevoke(final OPRETTransaction t1, final OPRETTransaction t2) {
-        final byte[] pkhash = Bytes.toArray(t1.opretData.get(2));
-        final byte[] sig = Bytes.concat(Bytes.toArray(t1.opretData.get(3)), Bytes.toArray(t2.opretData.get(3)));
+    private boolean handleRevoke(final OPRETTransaction t) {
+        final byte[] pkhash = Bytes.toArray(t.opretData.get(2));
+        final byte[] sig = Bytes.toArray(t.opretData.get(1));
 
         logger.debug("REVOKE PK {} - SIG {}", Utils.HEX.encode(pkhash), Utils.HEX.encode(sig));
         queueOnOPRETRevoke(pkhash, sig);
@@ -93,18 +77,7 @@ public class OPRETECParser extends OPRETBaseHandler {
     @Override
     public void pushData(final Sha256Hash blockHash, final Sha256Hash txHash, final Set<Sha256Hash> txPrevHash,
             final List<List<Byte>> opret_data) {
-        final OPRETTransaction optrans = new OPRETTransaction(blockHash, txHash, txPrevHash, opret_data);
-        logger.debug("pushData: {}", optrans);
-        for (final Sha256Hash t : txPrevHash) {
-            if (transHashMap.containsKey(t)) {
-                final OPRETTransaction opprev = transHashMap.get(t);
-                if (checkData(opprev, optrans)) {
-                    transHashMap.remove(t);
-                    return;
-                }
-            }
-        }
-        transHashMap.put(txHash, optrans);
+        checkData(new OPRETTransaction(blockHash, txHash, opret_data));
     }
 
     @Override
