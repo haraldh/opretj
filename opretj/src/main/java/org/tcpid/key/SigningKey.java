@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package org.tcpid.opretj.testapp;
+package org.tcpid.key;
 
 import static org.libsodium.jni.NaCl.sodium;
 import static org.libsodium.jni.SodiumConstants.PUBLICKEY_BYTES;

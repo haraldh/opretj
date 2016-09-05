@@ -19,8 +19,7 @@ public abstract class OPRETBaseHandler implements OPRETHandlerInterface {
     private final CopyOnWriteArrayList<ListenerRegistration<OPRETChangeEventListener>> opReturnChangeListeners = new CopyOnWriteArrayList<ListenerRegistration<OPRETChangeEventListener>>();
     private final Map<List<Byte>, Long> magicBytes = new HashMap<>();
 
-    @Override
-    public void addOPRET(final byte[] magic, final long earliestTime) {
+    protected void addOPRET(final byte[] magic, final long earliestTime) {
         logger.debug("addMagicBytes: {} - Time {}", Utils.HEX.encode(magic), earliestTime);
         final List<Byte> blist = Bytes.asList(magic);
         magicBytes.put(blist, earliestTime);
@@ -68,7 +67,6 @@ public abstract class OPRETBaseHandler implements OPRETHandlerInterface {
         }
     }
 
-    @Override
     public void removeOPRET(final byte[] magic) {
         magicBytes.remove(Bytes.asList(magic));
         queueOnOPRETChanged();

@@ -1,9 +1,5 @@
 package org.tcpid.opretj.testapp;
 
-import static org.bitcoinj.script.ScriptOpCodes.OP_RETURN;
-import static org.libsodium.jni.SodiumConstants.NONCE_BYTES;
-import static org.libsodium.jni.SodiumConstants.SECRETKEY_BYTES;
-
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
@@ -17,24 +13,19 @@ import org.bitcoinj.core.AddressFormatException;
 import org.bitcoinj.core.Coin;
 import org.bitcoinj.core.InsufficientMoneyException;
 import org.bitcoinj.core.NetworkParameters;
-import org.bitcoinj.core.Sha256Hash;
 import org.bitcoinj.core.Transaction;
 import org.bitcoinj.core.Utils;
 import org.bitcoinj.script.Script;
-import org.bitcoinj.script.ScriptBuilder;
 import org.bitcoinj.utils.Threading;
 import org.bitcoinj.wallet.SendRequest;
-import org.libsodium.jni.crypto.Box;
 import org.libsodium.jni.crypto.Hash;
-import org.libsodium.jni.keys.KeyPair;
-import org.libsodium.jni.keys.PublicKey;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.tcpid.key.SigningKey;
 import org.tcpid.opretj.OPRETECParser;
 import org.tcpid.opretj.OPRETWallet;
 import org.tcpid.opretj.OPRETWalletAppKit;
 
-import com.google.common.primitives.Bytes;
 import com.google.common.util.concurrent.Service;
 
 import jline.console.ConsoleReader;
@@ -49,42 +40,6 @@ public class App {
 
     private final static Logger logger = LoggerFactory.getLogger(App.class);
     private final static SigningKey SK = new SigningKey(HASH.sha256("TESTSEED".getBytes()));
-    private final static VerifyKey VK = SK.getVerifyKey();
-    private final static byte[] PKHASH = HASH.sha256(VK.toBytes());
-    private final static byte[] REVOKEMSG = Bytes.concat("Revoke ".getBytes(), PKHASH);
-
-    public static void checkKey(final byte[] pkhash, final byte[] sig) {
-        logger.warn("CHECKING REVOKE PKHASH {} - SIG {}", Utils.HEX.encode(pkhash), Utils.HEX.encode(sig));
-
-        if (!Arrays.equals(Arrays.copyOfRange(App.PKHASH, 0, 12), pkhash)) {
-            logger.warn("Unknown PK {}", Utils.HEX.encode(pkhash));
-            return;
-        }
-
-        logger.warn("Using VerifyKey {}", VK);
-
-        if (VK.verify(REVOKEMSG, sig)) {
-            logger.warn("REVOKED VerifyKey {}", VK);
-        } else {
-            logger.warn("SIGNATURE does not match!");
-        }
-    }
-
-    private static boolean cryptoSelfTest() {
-        final SigningKey msk = new SigningKey();
-
-        final KeyPair mkpair = msk.getKeyPair();
-        final KeyPair vkpair = SK.getKeyPair();
-        final byte[] nonce = Arrays.copyOfRange(Sha256Hash.hash("TEST".getBytes()), 0, 8);
-        final byte[] cipher = doubleEnc(mkpair, vkpair, "TEST".getBytes(), nonce);
-        // System.err.println("Cipher len: " + cipher.length);
-        try {
-            final byte[] chk = doubleDec(msk.getVerifyKey().getPublicKey(), VK.getPublicKey(), cipher, nonce);
-            return Arrays.equals(chk, "TEST".getBytes());
-        } catch (final Exception e) {
-            return false;
-        }
-    }
 
     private static void displayBalance(final OPRETWalletAppKit kit, final PrintWriter out) {
         out.write("Balance: " + kit.wallet().getBalance().toFriendlyString() + "\n");
@@ -103,54 +58,6 @@ public class App {
         out.write("\n");
 
         out.flush();
-    }
-
-    private static byte[] doubleDec(final PublicKey MK, final PublicKey VK, final byte[] cipher, final byte[] nonce) {
-
-        final KeyPair Epair = new KeyPair(
-                Arrays.copyOfRange(HASH.sha256(Bytes.concat(nonce, VK.toBytes(), MK.toBytes())), 0, SECRETKEY_BYTES));
-
-        final Box boxVK = new Box(VK, Epair.getPrivateKey());
-
-        final byte[] nonceVK = Arrays.copyOfRange(
-                HASH.sha256(Bytes.concat(nonce, Epair.getPrivateKey().toBytes(), VK.toBytes())), 0, NONCE_BYTES);
-
-        final byte[] cipherMK = boxVK.decrypt(nonceVK, cipher);
-
-        final Box boxMK = new Box(MK, Epair.getPrivateKey());
-
-        final byte[] nonceMK = Arrays.copyOfRange(
-                HASH.sha256(Bytes.concat(nonce, Epair.getPrivateKey().toBytes(), MK.toBytes())), 0, NONCE_BYTES);
-
-        final byte[] clear = boxMK.decrypt(nonceMK, cipherMK);
-
-        return clear;
-    }
-
-    private static byte[] doubleEnc(final KeyPair MKpair, final KeyPair VKpair, final byte[] clear,
-            final byte[] nonce) {
-
-        final KeyPair Epair = new KeyPair(Arrays.copyOfRange(
-                HASH.sha256(Bytes.concat(nonce, VKpair.getPublicKey().toBytes(), MKpair.getPublicKey().toBytes())), 0,
-                SECRETKEY_BYTES));
-
-        final Box boxMK = new Box(Epair.getPublicKey(), MKpair.getPrivateKey());
-
-        final byte[] nonceMK = Arrays.copyOfRange(
-                HASH.sha256(Bytes.concat(nonce, Epair.getPrivateKey().toBytes(), MKpair.getPublicKey().toBytes())), 0,
-                NONCE_BYTES);
-
-        final byte[] cipherMK = boxMK.encrypt(nonceMK, clear);
-
-        final Box boxVK = new Box(Epair.getPublicKey(), VKpair.getPrivateKey());
-
-        final byte[] nonceVK = Arrays.copyOfRange(
-                HASH.sha256(Bytes.concat(nonce, Epair.getPrivateKey().toBytes(), VKpair.getPublicKey().toBytes())), 0,
-                NONCE_BYTES);
-
-        final byte[] cipherVK = boxVK.encrypt(nonceVK, cipherMK);
-
-        return cipherVK;
     }
 
     private static String executeCommand(final String command) {
@@ -251,14 +158,6 @@ public class App {
 
     public static void main(final String[] args) throws Exception {
 
-        final boolean chk = cryptoSelfTest();
-        if (chk) {
-            System.err.println("Crypto self test: PASSED");
-        } else {
-            System.err.println("Crypto self test: FAILED");
-            System.exit(-1);
-        }
-
         final OptionParser parser = new OptionParser();
         final OptionSpec<NetworkEnum> net = parser.accepts("net", "The network to run the examples on")
                 .withRequiredArg().ofType(NetworkEnum.class).defaultsTo(NetworkEnum.TEST);
@@ -277,7 +176,17 @@ public class App {
 
         final OPRETECParser bs = new OPRETECParser();
 
-        bs.addOPRETECRevokeEventListener((pkhash, sig) -> checkKey(pkhash, sig));
+        final boolean chk = bs.cryptoSelfTest();
+        if (chk) {
+            System.err.println("Crypto self test: PASSED");
+        } else {
+            System.err.println("Crypto self test: FAILED");
+            System.exit(-1);
+        }
+
+        bs.addOPRETECRevokeEventListener((key) -> {
+            System.out.println("Revoked Key: " + Utils.HEX.encode(key.toBytes()));
+        });
 
         long earliestTime;
         if (params.getId().equals(NetworkParameters.ID_REGTEST)) {
@@ -288,10 +197,7 @@ public class App {
             earliestTime = Utils.currentTimeSeconds();
         }
 
-        bs.addOPRET(Arrays.copyOfRange(App.PKHASH, 0, 12), earliestTime);
-        // bs.addOPRET(Sha256Hash.hash("test1".getBytes()), earliestTime);
-        // bs.addOPRET(Utils.HEX.decode("0f490dee643b01b06e0ea84c253a90050a3543cfb7c74319fb47b04afee5b872"),
-        // earliestTime);
+        bs.addVerifyKey(SK.getVerifyKey(), earliestTime);
 
         final OPRETWalletAppKit kit = new OPRETWalletAppKit(params, new File("."), "opretwallet" + params.getId(), bs);
 
@@ -375,10 +281,7 @@ public class App {
         final NetworkParameters params = wallet.getNetworkParameters();
 
         final Transaction t = new Transaction(params);
-        final byte[] sig = SK.sign(REVOKEMSG);
-
-        final Script script = new ScriptBuilder().op(OP_RETURN).data(Utils.HEX.decode("ec0f")).data(sig)
-                .data(Arrays.copyOfRange(PKHASH, 0, 12)).build();
+        final Script script = OPRETECParser.getRevokeScript(SK);
         t.addOutput(Coin.ZERO, script);
         final SendRequest request = SendRequest.forTx(t);
         request.ensureMinRequiredFee = true;

@@ -4,7 +4,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import org.bitcoinj.core.PartialMerkleTree;
@@ -31,8 +30,7 @@ public class OPRETECExampleParser extends OPRETBaseHandler {
      */
     public void addOPRETECRevokeEventListener(final OPRETECEventListener listener) {
         // This is thread safe, so we don't need to take the lock.
-        opReturnChangeListeners
-                .add(new ListenerRegistration<OPRETECEventListener>(listener, Threading.SAME_THREAD));
+        opReturnChangeListeners.add(new ListenerRegistration<OPRETECEventListener>(listener, Threading.SAME_THREAD));
     }
 
     private boolean checkData(final OPRETTransaction t1, final OPRETTransaction t2) {
@@ -91,27 +89,9 @@ public class OPRETECExampleParser extends OPRETBaseHandler {
     }
 
     @Override
-    public void pushData(final Sha256Hash blockHash, final Sha256Hash txHash, final Set<Sha256Hash> txPrevHash,
-            final List<List<Byte>> opret_data) {
-        final OPRETTransaction optrans = new OPRETTransaction(blockHash, txHash, txPrevHash, opret_data);
-        logger.debug("pushData: {}", optrans);
-        for (final Sha256Hash t : txPrevHash) {
-            if (transHashMap.containsKey(t)) {
-                final OPRETTransaction opprev = transHashMap.get(t);
-                if (checkData(opprev, optrans)) {
-                    transHashMap.remove(t);
-                    return;
-                }
-            }
-        }
-        transHashMap.put(txHash, optrans);
-    }
-
-    @Override
-    public void pushMerkle(final Sha256Hash blockHash, final PartialMerkleTree partialMerkleTree) {
-        merkleHashMap.put(blockHash, partialMerkleTree);
-        logger.info("block hash {}", blockHash);
-        logger.info("Merkle Tree: {}", partialMerkleTree);
+    public void pushTransaction(final OPRETTransaction t) {
+        logger.debug("pushData: {}", t.opretData);
+        transHashMap.put(t.txHash, t);
     }
 
     protected void queueOnOPRETRevoke(final byte[] pkhash, final byte[] sig) {

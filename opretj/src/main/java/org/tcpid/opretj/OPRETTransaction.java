@@ -3,6 +3,7 @@ package org.tcpid.opretj;
 import java.io.Serializable;
 import java.util.List;
 
+import org.bitcoinj.core.PartialMerkleTree;
 import org.bitcoinj.core.Sha256Hash;
 import org.bitcoinj.core.Utils;
 
@@ -16,11 +17,20 @@ public class OPRETTransaction implements Serializable {
     public final Sha256Hash blockHash;
     public final Sha256Hash txHash;
     public final List<List<Byte>> opretData;
+    private PartialMerkleTree partialMerkleTree;
 
     public OPRETTransaction(final Sha256Hash blockHash, final Sha256Hash txHash, final List<List<Byte>> opret_data) {
         this.blockHash = blockHash;
         this.txHash = txHash;
         this.opretData = opret_data;
+    }
+
+    public PartialMerkleTree getPartialMerkleTree() {
+        return partialMerkleTree;
+    }
+
+    public void setPartialMerkleTree(PartialMerkleTree partialMerkleTree) {
+        this.partialMerkleTree = partialMerkleTree;
     }
 
     @Override

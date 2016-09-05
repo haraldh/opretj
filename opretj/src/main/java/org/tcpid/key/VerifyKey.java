@@ -14,23 +14,43 @@
  * limitations under the License.
  */
 
-package org.tcpid.opretj.testapp;
+package org.tcpid.key;
 
 import static org.libsodium.jni.NaCl.sodium;
 import static org.libsodium.jni.SodiumConstants.PUBLICKEY_BYTES;
 import static org.libsodium.jni.SodiumConstants.SIGNATURE_BYTES;
 
+import java.util.Arrays;
+
+import org.libsodium.jni.crypto.Hash;
 import org.libsodium.jni.crypto.Util;
 import org.libsodium.jni.encoders.Encoder;
 import org.libsodium.jni.keys.PublicKey;
 
-public class VerifyKey {
+public class VerifyKey implements Comparable<VerifyKey> {
+    public static final Hash HASH = new Hash();
 
     private final byte[] key;
+    private final byte[] hash;
+    private final byte[] shortHash;
+    private boolean revoked;
+
+    public boolean isRevoked() {
+        return revoked;
+    }
+
+    public void setRevoked(boolean revoked) {
+        if (this.revoked != true) {
+            this.revoked = revoked;
+        }
+    }
 
     public VerifyKey(byte[] key) {
         Util.checkLength(key, PUBLICKEY_BYTES);
         this.key = key;
+        this.hash = HASH.sha256(key);
+        this.shortHash = Arrays.copyOfRange(hash, 0, 12);
+        this.revoked = false;
     }
 
     public VerifyKey(String key, Encoder encoder) {
@@ -52,6 +72,17 @@ public class VerifyKey {
         return Encoder.HEX.encode(key);
     }
 
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if ((o == null) || (getClass() != o.getClass())) {
+            return false;
+        }
+        return Arrays.equals(key, ((VerifyKey) o).key);
+    }
+
     public boolean verify(byte[] message, byte[] signature) {
         Util.checkLength(signature, SIGNATURE_BYTES);
         final byte[] sigAndMsg = Util.merge(signature, message);
@@ -65,4 +96,28 @@ public class VerifyKey {
     public boolean verify(String message, String signature, Encoder encoder) {
         return verify(encoder.decode(message), encoder.decode(signature));
     }
+
+    public byte[] toHash() {
+        return this.hash;
+    }
+
+    public byte[] getShortHash() {
+        return this.shortHash;
+    }
+
+    @Override
+    public int compareTo(final VerifyKey other) {
+        for (int i = PUBLICKEY_BYTES - 1; i >= 0; i--) {
+            final int thisByte = this.key[i] & 0xff;
+            final int otherByte = other.key[i] & 0xff;
+            if (thisByte > otherByte) {
+                return 1;
+            }
+            if (thisByte < otherByte) {
+                return -1;
+            }
+        }
+        return 0;
+    }
+
 }
