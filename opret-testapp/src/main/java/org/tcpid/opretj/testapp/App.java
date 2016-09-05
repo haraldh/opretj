@@ -21,7 +21,7 @@ import org.bitcoinj.wallet.SendRequest;
 import org.libsodium.jni.crypto.Hash;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.tcpid.key.SigningKey;
+import org.tcpid.key.MasterSigningKey;
 import org.tcpid.opretj.OPRETECParser;
 import org.tcpid.opretj.OPRETWallet;
 import org.tcpid.opretj.OPRETWalletAppKit;
@@ -39,7 +39,7 @@ public class App {
     public final static long OPRET_BIRTHDAY = 1471989600;
 
     private final static Logger logger = LoggerFactory.getLogger(App.class);
-    private final static SigningKey SK = new SigningKey(HASH.sha256("TESTSEED".getBytes()));
+    private final static MasterSigningKey SK = new MasterSigningKey(HASH.sha256("TESTSEED".getBytes()));
 
     private static void displayBalance(final OPRETWalletAppKit kit, final PrintWriter out) {
         out.write("Balance: " + kit.wallet().getBalance().toFriendlyString() + "\n");
@@ -157,7 +157,15 @@ public class App {
     }
 
     public static void main(final String[] args) throws Exception {
+        MasterSigningKey sk = SK.getSubKey(1L);
 
+        System.err.println(SK.toString());
+        System.err.println(sk.toString());
+        sk = SK.getSubKey(2L);
+        System.err.println(sk.toString());
+        sk = SK.getSubKey(3L);
+        System.err.println(sk.toString());
+        System.exit(0);
         final OptionParser parser = new OptionParser();
         final OptionSpec<NetworkEnum> net = parser.accepts("net", "The network to run the examples on")
                 .withRequiredArg().ofType(NetworkEnum.class).defaultsTo(NetworkEnum.TEST);

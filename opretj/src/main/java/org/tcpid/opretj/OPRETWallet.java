@@ -3,6 +3,7 @@ package org.tcpid.opretj;
 import static org.bitcoinj.script.ScriptOpCodes.OP_RETURN;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -36,13 +37,13 @@ public class OPRETWallet extends Wallet implements BlocksDownloadedEventListener
     private final OPRETHandlerInterface opbs;
     private final Logger logger = LoggerFactory.getLogger(OPRETWallet.class);
 
-    protected final Map<Sha256Hash, Map<Sha256Hash, OPRETTransaction>> pendingTransactions;
+    protected final Map<Sha256Hash, Map<Sha256Hash, OPRETTransaction>> pendingTransactions = Collections
+            .synchronizedMap(new HashMap<>());
 
     public OPRETWallet(final NetworkParameters params, final KeyChainGroup keyChainGroup,
             final OPRETHandlerInterface bs) {
         super(params, keyChainGroup);
         opbs = bs;
-        pendingTransactions = new HashMap<>();
     }
 
     @Override
@@ -174,7 +175,7 @@ public class OPRETWallet extends Wallet implements BlocksDownloadedEventListener
         final Sha256Hash h = block.getHeader().getHash();
 
         if (!pendingTransactions.containsKey(h)) {
-            pendingTransactions.put(h, new HashMap<Sha256Hash, OPRETTransaction>());
+            pendingTransactions.put(h, Collections.synchronizedMap(new HashMap<Sha256Hash, OPRETTransaction>()));
         }
 
         pendingTransactions.get(h).put(tx.getHash(), new OPRETTransaction(h, tx.getHash(), myList));

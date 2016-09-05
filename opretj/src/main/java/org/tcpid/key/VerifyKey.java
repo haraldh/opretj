@@ -22,6 +22,7 @@ import static org.libsodium.jni.SodiumConstants.SIGNATURE_BYTES;
 
 import java.util.Arrays;
 
+import org.libsodium.jni.Sodium;
 import org.libsodium.jni.crypto.Hash;
 import org.libsodium.jni.crypto.Util;
 import org.libsodium.jni.encoders.Encoder;
@@ -34,18 +35,17 @@ public class VerifyKey implements Comparable<VerifyKey> {
     private final byte[] hash;
     private final byte[] shortHash;
     private boolean revoked;
+    private MasterVerifyKey masterkey;
 
-    public boolean isRevoked() {
-        return revoked;
+    public MasterVerifyKey getMasterkey() {
+        return masterkey;
     }
 
-    public void setRevoked(boolean revoked) {
-        if (this.revoked != true) {
-            this.revoked = revoked;
-        }
+    public void setMasterkey(MasterVerifyKey masterkey) {
+        this.masterkey = masterkey;
     }
 
-    public VerifyKey(byte[] key) {
+    public VerifyKey(final byte[] key) {
         Util.checkLength(key, PUBLICKEY_BYTES);
         this.key = key;
         this.hash = HASH.sha256(key);
@@ -53,56 +53,8 @@ public class VerifyKey implements Comparable<VerifyKey> {
         this.revoked = false;
     }
 
-    public VerifyKey(String key, Encoder encoder) {
+    public VerifyKey(final String key, final Encoder encoder) {
         this(encoder.decode(key));
-    }
-
-    public PublicKey getPublicKey() {
-        final byte[] pk = Util.zeros(PUBLICKEY_BYTES);
-        sodium().crypto_sign_ed25519_pk_to_curve25519(pk, this.key);
-        return new PublicKey(pk);
-    }
-
-    public byte[] toBytes() {
-        return key;
-    }
-
-    @Override
-    public String toString() {
-        return Encoder.HEX.encode(key);
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if ((o == null) || (getClass() != o.getClass())) {
-            return false;
-        }
-        return Arrays.equals(key, ((VerifyKey) o).key);
-    }
-
-    public boolean verify(byte[] message, byte[] signature) {
-        Util.checkLength(signature, SIGNATURE_BYTES);
-        final byte[] sigAndMsg = Util.merge(signature, message);
-        final byte[] buffer = Util.zeros(sigAndMsg.length);
-        final int[] bufferLen = new int[1];
-
-        return Util.isValid(sodium().crypto_sign_ed25519_open(buffer, bufferLen, sigAndMsg, sigAndMsg.length, key),
-                "signature was forged or corrupted");
-    }
-
-    public boolean verify(String message, String signature, Encoder encoder) {
-        return verify(encoder.decode(message), encoder.decode(signature));
-    }
-
-    public byte[] toHash() {
-        return this.hash;
-    }
-
-    public byte[] getShortHash() {
-        return this.shortHash;
     }
 
     @Override
@@ -118,6 +70,66 @@ public class VerifyKey implements Comparable<VerifyKey> {
             }
         }
         return 0;
+    }
+
+    @Override
+    public boolean equals(final Object o) {
+        if (this == o) {
+            return true;
+        }
+        if ((o == null) || (getClass() != o.getClass())) {
+            return false;
+        }
+        return Arrays.equals(key, ((VerifyKey) o).key);
+    }
+
+    public PublicKey getPublicKey() {
+        final byte[] pk = Util.zeros(PUBLICKEY_BYTES);
+        sodium();
+        Sodium.crypto_sign_ed25519_pk_to_curve25519(pk, this.key);
+        return new PublicKey(pk);
+    }
+
+    public byte[] getShortHash() {
+        return this.shortHash;
+    }
+
+    public boolean isRevoked() {
+        return revoked;
+    }
+
+    public void setRevoked(final boolean revoked) {
+        if (this.revoked != true) {
+            this.revoked = revoked;
+        }
+    }
+
+    public byte[] toBytes() {
+        return key;
+    }
+
+    public byte[] toHash() {
+        return this.hash;
+    }
+
+    @Override
+    public String toString() {
+        return Encoder.HEX.encode(key);
+    }
+
+    public boolean verify(final byte[] message, final byte[] signature) {
+        Util.checkLength(signature, SIGNATURE_BYTES);
+        final byte[] sigAndMsg = Util.merge(signature, message);
+        final byte[] buffer = Util.zeros(sigAndMsg.length);
+        final int[] bufferLen = new int[1];
+
+        sodium();
+        return Util.isValid(Sodium.crypto_sign_ed25519_open(buffer, bufferLen, sigAndMsg, sigAndMsg.length, key),
+                "signature was forged or corrupted");
+    }
+
+    public boolean verify(final String message, final String signature, final Encoder encoder) {
+        return verify(encoder.decode(message), encoder.decode(signature));
     }
 
 }

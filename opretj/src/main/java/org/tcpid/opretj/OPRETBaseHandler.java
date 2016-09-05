@@ -1,5 +1,6 @@
 package org.tcpid.opretj;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -17,7 +18,7 @@ import com.google.common.primitives.Bytes;
 public abstract class OPRETBaseHandler implements OPRETHandlerInterface {
     private static final Logger logger = LoggerFactory.getLogger(OPRETBaseHandler.class);
     private final CopyOnWriteArrayList<ListenerRegistration<OPRETChangeEventListener>> opReturnChangeListeners = new CopyOnWriteArrayList<ListenerRegistration<OPRETChangeEventListener>>();
-    private final Map<List<Byte>, Long> magicBytes = new HashMap<>();
+    private final Map<List<Byte>, Long> magicBytes = Collections.synchronizedMap(new HashMap<>());
 
     protected void addOPRET(final byte[] magic, final long earliestTime) {
         logger.debug("addMagicBytes: {} - Time {}", Utils.HEX.encode(magic), earliestTime);
