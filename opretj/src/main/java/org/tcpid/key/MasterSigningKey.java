@@ -10,8 +10,6 @@ import org.libsodium.jni.encoders.Encoder;
 import com.google.common.primitives.Longs;
 
 public class MasterSigningKey extends SigningKey {
-    private static final int HMACSHA512256_BYTES = sodium().crypto_auth_hmacsha512256_bytes();
-    private static final int HMACSHA512256_KEYBYTES = sodium().crypto_auth_hmacsha512256_keybytes();
     public static final Hash HASH = new Hash();
     private MasterSigningKey subkey;
     private Long subkeyindex;
