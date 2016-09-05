@@ -37,14 +37,6 @@ public class VerifyKey implements Comparable<VerifyKey> {
     private boolean revoked;
     private MasterVerifyKey masterkey;
 
-    public MasterVerifyKey getMasterkey() {
-        return masterkey;
-    }
-
-    public void setMasterkey(MasterVerifyKey masterkey) {
-        this.masterkey = masterkey;
-    }
-
     public VerifyKey(final byte[] key) {
         Util.checkLength(key, PUBLICKEY_BYTES);
         this.key = key;
@@ -83,6 +75,10 @@ public class VerifyKey implements Comparable<VerifyKey> {
         return Arrays.equals(key, ((VerifyKey) o).key);
     }
 
+    public MasterVerifyKey getMasterkey() {
+        return masterkey;
+    }
+
     public PublicKey getPublicKey() {
         final byte[] pk = Util.zeros(PUBLICKEY_BYTES);
         sodium();
@@ -96,6 +92,10 @@ public class VerifyKey implements Comparable<VerifyKey> {
 
     public boolean isRevoked() {
         return revoked;
+    }
+
+    public void setMasterkey(final MasterVerifyKey masterkey) {
+        this.masterkey = masterkey;
     }
 
     public void setRevoked(final boolean revoked) {

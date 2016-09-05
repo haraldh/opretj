@@ -10,6 +10,10 @@ public class MasterVerifyKey extends VerifyKey {
         super(key);
     }
 
+    public void clearSubKeys() {
+        subkeys.clear();
+    }
+
     public VerifyKey getValidSubKey() {
         return subkeys.getFirst();
     }
@@ -40,9 +44,5 @@ public class MasterVerifyKey extends VerifyKey {
         }
 
         subkeys.addLast(key);
-    }
-
-    public void clearSubKeys() {
-        subkeys.clear();
     }
 }

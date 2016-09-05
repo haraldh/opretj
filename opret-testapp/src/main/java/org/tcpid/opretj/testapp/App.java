@@ -46,7 +46,7 @@ public class App {
         out.flush();
     }
 
-    private static void displayHelp(PrintWriter out) {
+    private static void displayHelp(final PrintWriter out) {
         out.write("Available Commands:\n");
         out.write("\n");
         out.write("help            - this screen\n");
@@ -157,15 +157,6 @@ public class App {
     }
 
     public static void main(final String[] args) throws Exception {
-        MasterSigningKey sk = SK.getSubKey(1L);
-
-        System.err.println(SK.toString());
-        System.err.println(sk.toString());
-        sk = SK.getSubKey(2L);
-        System.err.println(sk.toString());
-        sk = SK.getSubKey(3L);
-        System.err.println(sk.toString());
-        System.exit(0);
         final OptionParser parser = new OptionParser();
         final OptionSpec<NetworkEnum> net = parser.accepts("net", "The network to run the examples on")
                 .withRequiredArg().ofType(NetworkEnum.class).defaultsTo(NetworkEnum.TEST);
@@ -284,7 +275,7 @@ public class App {
         kit.awaitTerminated();
     }
 
-    private static boolean sendOPReturn(final OPRETWalletAppKit kit, PrintWriter output) {
+    private static boolean sendOPReturn(final OPRETWalletAppKit kit, final PrintWriter output) {
         final OPRETWallet wallet = kit.opretwallet();
         final NetworkParameters params = wallet.getNetworkParameters();
 

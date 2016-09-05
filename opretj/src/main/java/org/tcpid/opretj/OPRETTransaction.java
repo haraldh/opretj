@@ -29,7 +29,7 @@ public class OPRETTransaction implements Serializable {
         return partialMerkleTree;
     }
 
-    public void setPartialMerkleTree(PartialMerkleTree partialMerkleTree) {
+    public void setPartialMerkleTree(final PartialMerkleTree partialMerkleTree) {
         this.partialMerkleTree = partialMerkleTree;
     }
 

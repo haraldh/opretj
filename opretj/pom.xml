@@ -4,10 +4,19 @@
 	<parent>
 		<groupId>org.tcpid</groupId>
 		<artifactId>opret-parent</artifactId>
-		<version>0.0.1-SNAPSHOT</version>
+		<version>0.0.2-SNAPSHOT</version>
 	</parent>
 	<artifactId>opretj</artifactId>
-
+<repositories>
+    <repository>
+        <id>oss-sonatype</id>
+        <name>oss-sonatype</name>
+        <url>https://oss.sonatype.org/content/repositories/snapshots/</url>
+        <snapshots>
+            <enabled>true</enabled>
+        </snapshots>
+    </repository>
+</repositories>
 
 	<dependencies>
 
