@@ -1,7 +1,5 @@
 package org.tcpid.key;
 
-import static org.libsodium.jni.NaCl.sodium;
-
 import java.util.ArrayList;
 
 import org.libsodium.jni.crypto.Hash;
