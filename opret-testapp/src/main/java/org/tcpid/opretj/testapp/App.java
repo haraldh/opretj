@@ -157,6 +157,7 @@ public class App {
     }
 
     public static void main(final String[] args) throws Exception {
+
         final OptionParser parser = new OptionParser();
         final OptionSpec<NetworkEnum> net = parser.accepts("net", "The network to run the examples on")
                 .withRequiredArg().ofType(NetworkEnum.class).defaultsTo(NetworkEnum.TEST);

@@ -4,6 +4,7 @@ import static org.bitcoinj.script.ScriptOpCodes.OP_RETURN;
 import static org.libsodium.jni.SodiumConstants.NONCE_BYTES;
 import static org.libsodium.jni.SodiumConstants.SECRETKEY_BYTES;
 
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -19,10 +20,8 @@ import org.bitcoinj.script.Script;
 import org.bitcoinj.script.ScriptBuilder;
 import org.bitcoinj.utils.ListenerRegistration;
 import org.bitcoinj.utils.Threading;
-import org.libsodium.jni.crypto.Box;
 import org.libsodium.jni.crypto.Hash;
-import org.libsodium.jni.keys.KeyPair;
-import org.libsodium.jni.keys.PublicKey;
+import org.libsodium.jni.crypto.Util;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.tcpid.key.HMACSHA512256;
@@ -52,58 +51,6 @@ public class OPRETECParser extends OPRETBaseHandler {
             logger.debug("SIGNATURE does not match!");
             return false;
         }
-    }
-
-    private static byte[] doubleDec(final PublicKey MK, final PublicKey VK, final byte[] cipher) {
-
-        final KeyPair Epair = new KeyPair(HMACSHA512256.of(VK.toBytes(), MK.toBytes()));
-
-        final Box boxVK = new Box(VK, Epair.getPrivateKey());
-
-        final byte[] nonceVK = Arrays.copyOfRange(HMACSHA512256.of(Epair.getPublicKey().toBytes(),
-                Bytes.concat(Epair.getPrivateKey().toBytes(), VK.toBytes())), 0, NONCE_BYTES);
-
-        final byte[] cipherMK = boxVK.decrypt(nonceVK, cipher);
-
-        final Box boxMK = new Box(MK, Epair.getPrivateKey());
-
-        final byte[] nonceMK = Arrays.copyOfRange(HMACSHA512256.of(Epair.getPublicKey().toBytes(),
-                Bytes.concat(Epair.getPrivateKey().toBytes(), MK.toBytes())), 0, NONCE_BYTES);
-
-        final byte[] clear = boxMK.decrypt(nonceMK, cipherMK);
-
-        System.err.println("cipher = " + Utils.HEX.encode(cipher));
-        System.err.println("reverse = " + Utils.HEX.encode(boxVK.encrypt(nonceVK, boxMK.encrypt(nonceMK, clear))));
-
-        return clear;
-    }
-
-    private static byte[] doubleEnc(final KeyPair MKpair, final KeyPair VKpair, final byte[] clear) {
-
-        final KeyPair Epair = new KeyPair(
-                HMACSHA512256.of(VKpair.getPublicKey().toBytes(), MKpair.getPublicKey().toBytes()));
-
-        final Box boxMK = new Box(Epair.getPublicKey(), MKpair.getPrivateKey());
-
-        final byte[] nonceMK = Arrays.copyOfRange(
-                HMACSHA512256.of(Epair.getPublicKey().toBytes(),
-                        Bytes.concat(Epair.getPrivateKey().toBytes(), MKpair.getPublicKey().toBytes())),
-                0, NONCE_BYTES);
-
-        final byte[] cipherMK = boxMK.encrypt(nonceMK, clear);
-        System.err.println("cipherMK len = " + cipherMK.length);
-
-        final Box boxVK = new Box(Epair.getPublicKey(), VKpair.getPrivateKey());
-
-        final byte[] nonceVK = Arrays.copyOfRange(
-                HMACSHA512256.of(Epair.getPublicKey().toBytes(),
-                        Bytes.concat(Epair.getPrivateKey().toBytes(), VKpair.getPublicKey().toBytes())),
-                0, NONCE_BYTES);
-
-        final byte[] cipherVK = boxVK.encrypt(nonceVK, cipherMK);
-        System.err.println("cipherVK len = " + cipherVK.length);
-
-        return cipherVK;
     }
 
     public static Script getRevokeScript(final SigningKey key) {
@@ -193,29 +140,33 @@ public class OPRETECParser extends OPRETBaseHandler {
             logger.error("MasterSigningKey(HASH.sha256('TESTSEED'.getBytes())) test failed");
             return false;
         }
-
+        final MasterSigningKey subkey = msk.getSubKey(1L).getSubKey(2L).getSubKey(3L).getSubKey(4L);
         if (!Arrays.equals(Utils.HEX.decode("00cb0c8748318d27eab65159a2261c028d764c1154fc302b9b046aa2bbefab27"),
-                msk.getSubKey(1L).getSubKey(2L).getSubKey(3L).getSubKey(4L).toBytes())) {
+                subkey.toBytes())) {
             logger.error("MasterSigningKey subkey derivation failed");
             return false;
         }
+        final BigInteger biMSK = new BigInteger(1, msk.toBytes());
+        BigInteger biSub = new BigInteger(1, subkey.toBytes());
+        final BigInteger pow2_256 = new BigInteger("10000000000000000000000000000000000000000000000000000000000000000",
+                16);
+        final BigInteger biDiff = biSub.subtract(biMSK).mod(pow2_256);
 
-        final SigningKey subkey = new SigningKey();
-        final VerifyKey vk = subkey.getVerifyKey();
+        logger.debug("{} = {}", Utils.HEX.encode(msk.toBytes()), biMSK.toString(16));
 
-        final KeyPair mkpair = msk.getKeyPair();
-        final KeyPair vkpair = subkey.getKeyPair();
-        final VerifyKey nvk = msk.getNextValidSubKey(1L).getVerifyKey();
-        final byte[] cipher = doubleEnc(mkpair, vkpair, nvk.toBytes());
-        try {
-            final byte[] chk = doubleDec(msk.getVerifyKey().getPublicKey(), vk.getPublicKey(), cipher);
-            System.err.println("cipher len = " + cipher.length);
-            System.err.println("cipher len = " + Utils.HEX.encode(cipher));
-            return Arrays.equals(chk, nvk.toBytes());
-        } catch (final Exception e) {
-            logger.error("doubleEnc -> doubleDec failed!");
+        logger.debug("{} - {} = {}", Utils.HEX.encode(msk.toBytes()), Utils.HEX.encode(subkey.toBytes()),
+                Utils.HEX.encode(biDiff.toByteArray()));
+
+        biSub = biMSK.add(biDiff).mod(pow2_256);
+        final byte[] bisubb = biSub.toByteArray();
+        logger.debug("{}", Utils.HEX.encode(Util.prependZeros(32 - bisubb.length, bisubb)));
+
+        if (!Arrays.equals(bisubb, subkey.toBytes())) {
+            logger.error("MasterSigningKey subkey difference calculation failed");
             return false;
         }
+
+        return true;
     }
 
     private boolean handleRevoke(final OPRETTransaction t) {
