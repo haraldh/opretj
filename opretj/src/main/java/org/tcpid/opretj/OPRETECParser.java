@@ -1,6 +1,7 @@
 package org.tcpid.opretj;
 
 import static org.bitcoinj.script.ScriptOpCodes.OP_RETURN;
+import static org.libsodium.jni.NaCl.sodium;
 import static org.libsodium.jni.SodiumConstants.NONCE_BYTES;
 import static org.libsodium.jni.SodiumConstants.SECRETKEY_BYTES;
 
@@ -20,12 +21,15 @@ import org.bitcoinj.script.Script;
 import org.bitcoinj.script.ScriptBuilder;
 import org.bitcoinj.utils.ListenerRegistration;
 import org.bitcoinj.utils.Threading;
+import org.libsodium.jni.Sodium;
 import org.libsodium.jni.crypto.Hash;
 import org.libsodium.jni.crypto.Util;
+import org.libsodium.jni.encoders.Encoder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.tcpid.key.HMACSHA512256;
 import org.tcpid.key.MasterSigningKey;
+import org.tcpid.key.MasterVerifyKey;
 import org.tcpid.key.SigningKey;
 import org.tcpid.key.VerifyKey;
 
@@ -35,7 +39,15 @@ public class OPRETECParser extends OPRETBaseHandler {
     private static final Logger logger = LoggerFactory.getLogger(OPRETECParser.class);
     public static final Hash HASH = new Hash();
 
-    private static final List<Byte> OPRET_MAGIC = Bytes.asList(Utils.HEX.decode("ec0f"));
+    private static final List<Byte> OPRET_MAGIC_EC1C = Bytes.asList(Utils.HEX.decode("ec1c"));
+    private static final List<Byte> OPRET_MAGIC_EC1D = Bytes.asList(Utils.HEX.decode("ec1d"));
+    private static final List<Byte> OPRET_MAGIC_ECA1 = Bytes.asList(Utils.HEX.decode("eca1"));
+    private static final List<Byte> OPRET_MAGIC_ECA2 = Bytes.asList(Utils.HEX.decode("eca2"));
+    private static final List<Byte> OPRET_MAGIC_ECA3 = Bytes.asList(Utils.HEX.decode("eca3"));
+    private static final List<Byte> OPRET_MAGIC_ECA4 = Bytes.asList(Utils.HEX.decode("eca4"));
+    private static final List<Byte> OPRET_MAGIC_EC51 = Bytes.asList(Utils.HEX.decode("ec51"));
+    private static final List<Byte> OPRET_MAGIC_EC52 = Bytes.asList(Utils.HEX.decode("ec52"));
+    private static final List<Byte> OPRET_MAGIC_EC0F = Bytes.asList(Utils.HEX.decode("ec0f"));
 
     public static boolean checkKeyforRevoke(final VerifyKey k, final byte[] sig) {
         logger.debug("CHECKING REVOKE PKHASH {} - SIG {}", Utils.HEX.encode(k.toHash()), Utils.HEX.encode(sig));
@@ -65,8 +77,20 @@ public class OPRETECParser extends OPRETBaseHandler {
     protected final Map<Sha256Hash, PartialMerkleTree> merkleHashMap = Collections.synchronizedMap(new HashMap<>());
 
     protected final Map<Sha256Hash, OPRETTransaction> transHashMap = Collections.synchronizedMap(new HashMap<>());
+    protected final Map<List<Byte>, List<OPRETTransaction>> transA1HashMap = Collections
+            .synchronizedMap(new HashMap<>());
+    protected final Map<List<Byte>, List<OPRETTransaction>> transA2HashMap = Collections
+            .synchronizedMap(new HashMap<>());
+    protected final Map<List<Byte>, List<OPRETTransaction>> transA3HashMap = Collections
+            .synchronizedMap(new HashMap<>());
+    protected final Map<List<Byte>, List<OPRETTransaction>> transA4HashMap = Collections
+            .synchronizedMap(new HashMap<>());
+    protected final Map<List<Byte>, List<OPRETTransaction>> trans51HashMap = Collections
+            .synchronizedMap(new HashMap<>());
+    protected final Map<List<Byte>, List<OPRETTransaction>> trans52HashMap = Collections
+            .synchronizedMap(new HashMap<>());
 
-    protected final Map<List<Byte>, List<VerifyKey>> verifyKeys = Collections.synchronizedMap(new HashMap<>());
+    protected final Map<List<Byte>, List<MasterVerifyKey>> verifyKeys = Collections.synchronizedMap(new HashMap<>());
 
     private final CopyOnWriteArrayList<ListenerRegistration<OPRETECEventListener>> opReturnChangeListeners = new CopyOnWriteArrayList<>();
 
@@ -80,45 +104,15 @@ public class OPRETECParser extends OPRETBaseHandler {
         opReturnChangeListeners.add(new ListenerRegistration<OPRETECEventListener>(listener, Threading.SAME_THREAD));
     }
 
-    public void addVerifyKey(final VerifyKey key, final long earliestTime) {
+    public void addVerifyKey(final MasterVerifyKey key, final long earliestTime) {
         final List<Byte> hash = Bytes.asList(key.getShortHash());
         if (!verifyKeys.containsKey(hash)) {
-            verifyKeys.put(hash, new ArrayList<VerifyKey>());
+            verifyKeys.put(hash, new ArrayList<MasterVerifyKey>());
         }
 
         verifyKeys.get(hash).add(key);
         logger.debug("Adding pkhash {}", key.getShortHash());
         addOPRET(key.getShortHash(), earliestTime);
-    }
-
-    private boolean checkData(final OPRETTransaction t) {
-        final List<List<Byte>> opret_data = new ArrayList<>(t.opretData);
-        logger.debug("checking {}", opret_data);
-
-        if (opret_data.size() != 3) {
-            return false;
-        }
-
-        List<Byte> chunk;
-        chunk = opret_data.get(0);
-        if (!chunk.equals(OPRET_MAGIC)) {
-            logger.debug("chunk 0: != OPRET_MAGIC");
-            return false;
-        }
-
-        chunk = opret_data.get(1);
-        if ((chunk.size() != 64)) {
-            logger.debug("chunk 1 size != 64, but {}", chunk.size());
-            return false;
-        }
-
-        chunk = opret_data.get(2);
-        if ((chunk.size() != 12)) {
-            logger.debug("chunk 2 size!= 12 but {} ", chunk.size());
-            return false;
-        }
-
-        return handleRevoke(t);
     }
 
     public boolean cryptoSelfTest() {
@@ -169,14 +163,24 @@ public class OPRETECParser extends OPRETBaseHandler {
         return true;
     }
 
-    private boolean handleRevoke(final OPRETTransaction t) {
-        final List<Byte> pkhash = t.opretData.get(2);
+    private boolean handleEC0F(final OPRETTransaction t) {
         final byte[] sig = Bytes.toArray(t.opretData.get(1));
+        if ((sig.length != 64)) {
+            logger.debug("chunk 1 size != 64, but {}", sig.length);
+            return false;
+        }
+
+        final List<Byte> pkhash = t.opretData.get(2);
+        if ((pkhash.size() != 12)) {
+            logger.debug("chunk 2 size!= 12 but {} ", pkhash.size());
+            return false;
+        }
+
         if (!verifyKeys.containsKey(pkhash)) {
             return false;
         }
 
-        for (final VerifyKey k : verifyKeys.get(t.opretData.get(2))) {
+        for (final MasterVerifyKey k : verifyKeys.get(pkhash)) {
             if (checkKeyforRevoke(k, sig)) {
                 if (k.isRevoked()) {
                     logger.debug("Duplicate REVOKE PK {} - SIG {}", Utils.HEX.encode(k.getShortHash()),
@@ -193,12 +197,284 @@ public class OPRETECParser extends OPRETBaseHandler {
         return false;
     }
 
-    @Override
-    public void pushTransaction(final OPRETTransaction t) {
-        checkData(t);
+    private boolean handleEC1C(final OPRETTransaction t) {
+        // TODO Auto-generated method stub
+        return false;
     }
 
-    protected void queueOnOPRETRevoke(final VerifyKey key) {
+    private boolean handleEC1D(final OPRETTransaction t) {
+        final byte[] sig = Bytes.toArray(t.opretData.get(1));
+        if ((sig.length != 64)) {
+            logger.debug("chunk 1 size != 64, but {}", sig.length);
+            return false;
+        }
+
+        final List<Byte> pkhash = t.opretData.get(2);
+        if ((pkhash.size() != 12)) {
+            logger.debug("chunk 2 size!= 12 but {} ", pkhash.size());
+            return false;
+        }
+
+        if (!verifyKeys.containsKey(pkhash)) {
+            return false;
+        }
+
+        for (final MasterVerifyKey k : verifyKeys.get(pkhash)) {
+            if (checkKeyforRevoke(k, sig)) {
+                if (k.isRevoked()) {
+                    logger.debug("Duplicate REVOKE PK {} - SIG {}", Utils.HEX.encode(k.getShortHash()),
+                            Utils.HEX.encode(sig));
+                } else {
+                    k.setRevoked(true);
+                    logger.debug("REVOKE PK {} - SIG {}", Utils.HEX.encode(k.getShortHash()), Utils.HEX.encode(sig));
+                }
+                queueOnOPRETId(k);
+                return true;
+
+            }
+        }
+        return false;
+    }
+
+    private boolean handleEC51(final OPRETTransaction t) {
+        // TODO Auto-generated method stub
+        return false;
+    }
+
+    private boolean handleEC52(final OPRETTransaction t) {
+        // TODO Auto-generated method stub
+        return false;
+    }
+
+    private boolean handleECA1(final OPRETTransaction t1) {
+        // FIXME: refactor with handleECA2
+
+        logger.debug("handleECA1");
+        final byte[] data1 = Bytes.toArray(t1.opretData.get(1));
+        if (((data1.length < 48) || (data1.length > 64))) {
+            logger.debug("invalid chunk1 size = {}", data1.length);
+            return false;
+        }
+
+        final List<Byte> pkhash = t1.opretData.get(2);
+        if ((pkhash.size() != 12)) {
+            logger.debug("chunk 2 size != 12 but {} ", pkhash.size());
+            return false;
+        }
+
+        if (!verifyKeys.containsKey(pkhash)) {
+            return false;
+        }
+
+        if (transA2HashMap.containsKey(pkhash)) {
+            for (final OPRETTransaction t2 : transA2HashMap.get(pkhash)) {
+                final byte[] data2 = Bytes.toArray(t2.opretData.get(1));
+                final byte[] cipher = Bytes.concat(Arrays.copyOfRange(data1, 0, 48), Arrays.copyOfRange(data2, 0, 48));
+                BigInteger nonce1 = BigInteger.ZERO;
+                BigInteger nonce2 = BigInteger.ZERO;
+                if (data1.length > 48) {
+                    nonce1 = new BigInteger(1, Arrays.copyOfRange(data1, 48, data1.length));
+                    logger.debug("nonce1 {}", Encoder.HEX.encode(nonce1.toByteArray()));
+                    logger.debug("nonce1shift {}", Encoder.HEX.encode(nonce1.shiftLeft(16 * 8).toByteArray()));
+                }
+                if (data2.length > 48) {
+                    nonce2 = new BigInteger(1, Arrays.copyOfRange(data2, 48, data2.length));
+                    logger.debug("nonce2 {}", Encoder.HEX.encode(nonce2.toByteArray()));
+                }
+
+                final BigInteger nonce = nonce1.shiftLeft(16 * 8).or(nonce2);
+                logger.debug("nonceshift {}", Encoder.HEX.encode(nonce.toByteArray()));
+
+                byte[] noncebytes = Util.prependZeros(32, nonce.toByteArray());
+                noncebytes = Arrays.copyOfRange(noncebytes, noncebytes.length - 32, noncebytes.length);
+
+                for (final MasterVerifyKey k : verifyKeys.get(pkhash)) {
+                    byte[] sharedkey, xornonce;
+                    sharedkey = HASH.sha256(HASH.sha256(Bytes.concat(k.toBytes(), noncebytes)));
+                    xornonce = Arrays.copyOfRange(HASH.sha256(Bytes.concat(sharedkey, noncebytes)), 0, 24);
+                    logger.debug("checking key {}", Encoder.HEX.encode(k.toBytes()));
+                    logger.debug("noncebytes {}", Encoder.HEX.encode(noncebytes));
+                    logger.debug("noncebytes len {}", noncebytes.length);
+                    logger.debug("xornonce {}", Encoder.HEX.encode(xornonce));
+                    logger.debug("sharedkey {}", Encoder.HEX.encode(sharedkey));
+                    sodium();
+                    final byte[] msg = Util.zeros(96);
+                    Sodium.crypto_stream_xsalsa20_xor(msg, cipher, 96, xornonce, sharedkey);
+                    final byte[] vk = Arrays.copyOfRange(msg, 0, 32);
+                    final byte[] sig = Arrays.copyOfRange(msg, 32, 96);
+                    try {
+                        logger.debug("Checking sig {} with key {}", Encoder.HEX.encode(sig), Encoder.HEX.encode(vk));
+                        k.verify(vk, sig);
+                    } catch (final RuntimeException e) {
+                        logger.debug("sig does not match");
+                        continue;
+                    }
+                    logger.debug("sig matches");
+
+                    k.setFirstValidSubKey(new MasterVerifyKey(vk), t1, t2);
+                    transA2HashMap.get(pkhash).remove(t2);
+                    if (transA2HashMap.get(pkhash).isEmpty()) {
+                        transA2HashMap.remove(pkhash);
+                    }
+                    return true;
+                }
+            }
+        }
+        if (!transA1HashMap.containsKey(pkhash)) {
+            transA1HashMap.put(pkhash, new ArrayList<OPRETTransaction>());
+        }
+        transA1HashMap.get(pkhash).add(t1);
+
+        return false;
+    }
+
+    private boolean handleECA2(final OPRETTransaction t2) {
+        // FIXME: refactor with handleECA1
+        logger.debug("handleECA2");
+        final byte[] data2 = Bytes.toArray(t2.opretData.get(1));
+        if (((data2.length < 48) || (data2.length > 64))) {
+            logger.debug("invalid chunk1 size = {}", data2.length);
+            return false;
+        }
+
+        final List<Byte> pkhash = t2.opretData.get(2);
+        if ((pkhash.size() != 12)) {
+            logger.debug("chunk 2 size != 12 but {} ", pkhash.size());
+            return false;
+        }
+
+        if (!verifyKeys.containsKey(pkhash)) {
+            logger.debug("pkash not in hashmap");
+            return false;
+        }
+
+        if (transA1HashMap.containsKey(pkhash)) {
+            for (final OPRETTransaction t1 : transA1HashMap.get(pkhash)) {
+                final byte[] data1 = Bytes.toArray(t1.opretData.get(1));
+                final byte[] cipher = Bytes.concat(Arrays.copyOfRange(data1, 0, 48), Arrays.copyOfRange(data2, 0, 48));
+                BigInteger nonce1 = BigInteger.ZERO;
+                BigInteger nonce2 = BigInteger.ZERO;
+                if (data1.length > 48) {
+                    nonce1 = new BigInteger(1, Arrays.copyOfRange(data1, 48, data1.length));
+                }
+                if (data2.length > 48) {
+                    nonce2 = new BigInteger(1, Arrays.copyOfRange(data2, 48, data2.length));
+                }
+
+                final BigInteger nonce = nonce1.shiftLeft(16 * 8).or(nonce2);
+                byte[] noncebytes = Util.prependZeros(32, nonce.toByteArray());
+                noncebytes = Arrays.copyOfRange(noncebytes, noncebytes.length - 32, noncebytes.length);
+
+                for (final MasterVerifyKey k : verifyKeys.get(pkhash)) {
+                    byte[] sharedkey, xornonce;
+                    logger.debug("checking key {}", Encoder.HEX.encode(k.toBytes()));
+                    logger.debug("noncebytes {}", Encoder.HEX.encode(noncebytes));
+                    logger.debug("noncebytes len {}", noncebytes.length);
+                    sharedkey = HASH.sha256(HASH.sha256(Bytes.concat(k.toBytes(), noncebytes)));
+                    xornonce = Arrays.copyOfRange(HASH.sha256(Bytes.concat(sharedkey, noncebytes)), 0, 24);
+                    logger.debug("xornonce {}", Encoder.HEX.encode(xornonce));
+                    logger.debug("sharedkey {}", Encoder.HEX.encode(sharedkey));
+
+                    sodium();
+                    final byte[] msg = Util.zeros(96);
+                    Sodium.crypto_stream_xsalsa20_xor(msg, cipher, 96, xornonce, sharedkey);
+                    final byte[] vk = Arrays.copyOfRange(msg, 0, 32);
+                    final byte[] sig = Arrays.copyOfRange(msg, 32, 96);
+                    try {
+                        logger.debug("Checking sig {} with key {}", Encoder.HEX.encode(sig), Encoder.HEX.encode(vk));
+                        k.verify(vk, sig);
+                    } catch (final RuntimeException e) {
+                        logger.debug("sig does not match");
+                        continue;
+                    }
+
+                    logger.debug("sig matches");
+                    k.setFirstValidSubKey(new MasterVerifyKey(vk), t1, t2);
+                    transA1HashMap.get(pkhash).remove(t1);
+                    if (transA1HashMap.get(pkhash).isEmpty()) {
+                        transA1HashMap.remove(pkhash);
+                    }
+                    return true;
+                }
+            }
+        }
+        if (!transA2HashMap.containsKey(pkhash)) {
+            transA2HashMap.put(pkhash, new ArrayList<OPRETTransaction>());
+        }
+        transA2HashMap.get(pkhash).add(t2);
+        logger.debug("nothing in A1 HashMap");
+        return false;
+    }
+
+    private boolean handleECA3(final OPRETTransaction t) {
+        // TODO Auto-generated method stub
+        return false;
+    }
+
+    private boolean handleECA4(final OPRETTransaction t) {
+        // TODO Auto-generated method stub
+        return false;
+    }
+
+    protected boolean handleTransaction(final OPRETTransaction t) {
+        logger.debug("checking {}", t.opretData);
+
+        if ((t.opretData.size() != 2) && (t.opretData.size() != 3) && (t.opretData.size() != 4)) {
+            return false;
+        }
+
+        final List<Byte> chunk = t.opretData.get(0);
+
+        if (chunk.equals(OPRET_MAGIC_EC0F)) {
+            return handleEC0F(t);
+        }
+
+        if (chunk.equals(OPRET_MAGIC_EC1C)) {
+            return handleEC1C(t);
+        }
+
+        if (chunk.equals(OPRET_MAGIC_EC1D)) {
+            return handleEC1D(t);
+        }
+
+        if (chunk.equals(OPRET_MAGIC_ECA1)) {
+            return handleECA1(t);
+        }
+
+        if (chunk.equals(OPRET_MAGIC_ECA2)) {
+            return handleECA2(t);
+        }
+
+        if (chunk.equals(OPRET_MAGIC_ECA3)) {
+            return handleECA3(t);
+        }
+
+        if (chunk.equals(OPRET_MAGIC_ECA4)) {
+            return handleECA4(t);
+        }
+
+        if (chunk.equals(OPRET_MAGIC_EC51)) {
+            return handleEC51(t);
+        }
+
+        if (chunk.equals(OPRET_MAGIC_EC52)) {
+            return handleEC52(t);
+        }
+
+        return false;
+    }
+
+    @Override
+    public void pushTransaction(final OPRETTransaction t) {
+        handleTransaction(t);
+    }
+
+    private void queueOnOPRETId(final MasterVerifyKey k) {
+        // TODO Auto-generated method stub
+
+    }
+
+    protected void queueOnOPRETRevoke(final MasterVerifyKey key) {
         for (final ListenerRegistration<OPRETECEventListener> registration : opReturnChangeListeners) {
             registration.executor.execute(() -> registration.listener.onOPRETRevoke(key));
         }
@@ -212,7 +488,7 @@ public class OPRETECParser extends OPRETBaseHandler {
         return ListenerRegistration.removeFromList(listener, opReturnChangeListeners);
     }
 
-    public void removeVerifyKey(final VerifyKey key) {
+    public void removeVerifyKey(final MasterVerifyKey key) {
         final List<Byte> hash = Bytes.asList(key.getShortHash());
 
         if (!verifyKeys.containsKey(hash)) {

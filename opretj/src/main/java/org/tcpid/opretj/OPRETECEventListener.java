@@ -1,7 +1,7 @@
 package org.tcpid.opretj;
 
-import org.tcpid.key.VerifyKey;
+import org.tcpid.key.MasterVerifyKey;
 
 public interface OPRETECEventListener {
-    void onOPRETRevoke(VerifyKey key);
+    void onOPRETRevoke(MasterVerifyKey key);
 }

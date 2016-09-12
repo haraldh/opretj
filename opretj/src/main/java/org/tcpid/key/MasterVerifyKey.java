@@ -3,6 +3,8 @@ package org.tcpid.key;
 import java.util.LinkedList;
 import java.util.NoSuchElementException;
 
+import org.tcpid.opretj.OPRETTransaction;
+
 public class MasterVerifyKey extends VerifyKey {
     private final LinkedList<VerifyKey> subkeys = new LinkedList<>();
 
@@ -29,7 +31,7 @@ public class MasterVerifyKey extends VerifyKey {
         subkeys.remove(i);
     }
 
-    public void setFirstValidSubKey(final VerifyKey key) {
+    public void setFirstValidSubKey(final VerifyKey key, final OPRETTransaction t1, final OPRETTransaction t2) {
         if (!subkeys.isEmpty()) {
             throw new IndexOutOfBoundsException("Subkey list is not empty");
         }

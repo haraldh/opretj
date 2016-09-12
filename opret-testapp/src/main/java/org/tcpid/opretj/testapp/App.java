@@ -197,7 +197,7 @@ public class App {
             earliestTime = Utils.currentTimeSeconds();
         }
 
-        bs.addVerifyKey(SK.getVerifyKey(), earliestTime);
+        bs.addVerifyKey(SK.getMasterVerifyKey(), earliestTime);
 
         final OPRETWalletAppKit kit = new OPRETWalletAppKit(params, new File("."), "opretwallet" + params.getId(), bs);
 

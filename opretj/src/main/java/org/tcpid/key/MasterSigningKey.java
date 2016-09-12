@@ -27,6 +27,10 @@ public class MasterSigningKey extends SigningKey {
         this.keyindex = new ArrayList<>(keyindex);
     }
 
+    public MasterVerifyKey getMasterVerifyKey() {
+        return new MasterVerifyKey(this.getVerifyKey().toBytes());
+    }
+
     public MasterSigningKey getNextValidSubKey(final Long offset) {
         return getSubKey(subkeyindex + offset);
     }
