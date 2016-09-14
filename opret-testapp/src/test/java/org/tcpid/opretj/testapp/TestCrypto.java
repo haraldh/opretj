@@ -1,4 +1,4 @@
-package org.tcpid.opretj;
+package org.tcpid.opretj.testapp;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
@@ -67,8 +67,9 @@ public class TestCrypto {
     @Test
     public void testSignEnc() {
         final MasterSigningKey msk = new MasterSigningKey(HASH.sha256("TESTSEED".getBytes()));
+        final MasterVerifyKey subkey = msk.getSubKey(1L).getMasterVerifyKey();
         final MasterVerifyKey vk = msk.getMasterVerifyKey();
-        byte[] sig = msk.sign(vk.toBytes());
+        byte[] sig = msk.sign(subkey.toBytes());
 
         logger.debug("using key {}", Encoder.HEX.encode(vk.toBytes()));
         final byte[] noncebytes = Util.zeros(32);
@@ -78,7 +79,7 @@ public class TestCrypto {
         logger.debug("sharedkey {}", Encoder.HEX.encode(sharedkey));
 
         final byte[] cipher = Util.zeros(96);
-        byte[] msg = Bytes.concat(vk.toBytes(), sig);
+        byte[] msg = Bytes.concat(subkey.toBytes(), sig);
         assertEquals(96, msg.length);
 
         sodium();
@@ -93,7 +94,7 @@ public class TestCrypto {
         sig = Arrays.copyOfRange(msg, 32, 96);
         logger.debug("vkb : {}", Encoder.HEX.encode(vkb));
         assertTrue("Verification of signature failed.", vk.verify(vkb, sig));
-        assertArrayEquals(vk.toBytes(), vkb);
+        assertArrayEquals(subkey.toBytes(), vkb);
     }
 
     @Test

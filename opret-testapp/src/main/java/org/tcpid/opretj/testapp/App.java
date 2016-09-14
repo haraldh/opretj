@@ -22,7 +22,6 @@ import org.libsodium.jni.crypto.Hash;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.tcpid.key.MasterSigningKey;
-import org.tcpid.opretj.OPRETECParser;
 import org.tcpid.opretj.OPRETWallet;
 import org.tcpid.opretj.OPRETWalletAppKit;
 

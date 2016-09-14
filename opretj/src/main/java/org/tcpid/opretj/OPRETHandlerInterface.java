@@ -18,7 +18,7 @@ public interface OPRETHandlerInterface {
 
     // void removeOPRET(byte[] magic);
 
-    void pushTransaction(OPRETTransaction t);
+    boolean pushTransaction(OPRETTransaction t);
 
     boolean removeOPRETChangeEventListener(OPRETChangeEventListener listener);
 

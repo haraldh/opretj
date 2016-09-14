@@ -1,4 +1,4 @@
-package org.tcpid.opretj;
+package org.tcpid.opretj.testapp;
 
 import static org.bitcoinj.script.ScriptOpCodes.OP_RETURN;
 import static org.libsodium.jni.NaCl.sodium;
@@ -32,6 +32,8 @@ import org.tcpid.key.MasterSigningKey;
 import org.tcpid.key.MasterVerifyKey;
 import org.tcpid.key.SigningKey;
 import org.tcpid.key.VerifyKey;
+import org.tcpid.opretj.OPRETBaseHandler;
+import org.tcpid.opretj.OPRETTransaction;
 
 import com.google.common.primitives.Bytes;
 
@@ -163,6 +165,85 @@ public class OPRETECParser extends OPRETBaseHandler {
         return true;
     }
 
+    private boolean handleAnnounce(final OPRETTransaction selfTx,
+            final Map<List<Byte>, List<OPRETTransaction>> selfTransHashMap,
+            final Map<List<Byte>, List<OPRETTransaction>> otherTransHashMap, final boolean isT1) {
+
+        final byte[] selfData = Bytes.toArray(selfTx.opretData.get(1));
+        if (((selfData.length < 48) || (selfData.length > 64))) {
+            logger.debug("invalid chunk1 size = {}", selfData.length);
+            return false;
+        }
+
+        final List<Byte> pkhash = selfTx.opretData.get(2);
+        if ((pkhash.size() != 12)) {
+            logger.debug("chunk 2 size != 12 but {} ", pkhash.size());
+            return false;
+        }
+
+        if (!verifyKeys.containsKey(pkhash)) {
+            return false;
+        }
+
+        if (otherTransHashMap.containsKey(pkhash)) {
+            for (final OPRETTransaction otherTx : otherTransHashMap.get(pkhash)) {
+                final byte[] otherData = Bytes.toArray(otherTx.opretData.get(1));
+                final byte[] cipher = isT1
+                        ? Bytes.concat(Arrays.copyOfRange(selfData, 0, 48), Arrays.copyOfRange(otherData, 0, 48))
+                        : Bytes.concat(Arrays.copyOfRange(otherData, 0, 48), Arrays.copyOfRange(selfData, 0, 48));
+                final BigInteger selfNonce = (selfData.length == 48) ? BigInteger.ZERO
+                        : new BigInteger(1, Arrays.copyOfRange(selfData, 48, selfData.length));
+                final BigInteger otherNonce = (otherData.length == 48) ? BigInteger.ZERO
+                        : new BigInteger(1, Arrays.copyOfRange(otherData, 48, otherData.length));
+
+                final BigInteger nonce = isT1 ? selfNonce.shiftLeft(16 * 8).or(otherNonce)
+                        : otherNonce.shiftLeft(16 * 8).or(selfNonce);
+
+                byte[] noncebytes = Util.prependZeros(32, nonce.toByteArray());
+                noncebytes = Arrays.copyOfRange(noncebytes, noncebytes.length - 32, noncebytes.length);
+
+                for (final MasterVerifyKey k : verifyKeys.get(pkhash)) {
+                    byte[] sharedkey, xornonce;
+                    sharedkey = HASH.sha256(HASH.sha256(Bytes.concat(k.toBytes(), noncebytes)));
+                    xornonce = Arrays.copyOfRange(HASH.sha256(Bytes.concat(sharedkey, noncebytes)), 0, 24);
+                    logger.debug("checking key {}", Encoder.HEX.encode(k.toBytes()));
+                    logger.debug("noncebytes {}", Encoder.HEX.encode(noncebytes));
+                    logger.debug("noncebytes len {}", noncebytes.length);
+                    logger.debug("xornonce {}", Encoder.HEX.encode(xornonce));
+                    logger.debug("sharedkey {}", Encoder.HEX.encode(sharedkey));
+                    sodium();
+                    final byte[] msg = Util.zeros(96);
+                    Sodium.crypto_stream_xsalsa20_xor(msg, cipher, 96, xornonce, sharedkey);
+                    final byte[] vk = Arrays.copyOfRange(msg, 0, 32);
+                    final byte[] sig = Arrays.copyOfRange(msg, 32, 96);
+                    try {
+                        logger.debug("Checking sig {} with key {}", Encoder.HEX.encode(sig), Encoder.HEX.encode(vk));
+                        k.verify(vk, sig);
+                    } catch (final RuntimeException e) {
+                        logger.debug("sig does not match");
+                        continue;
+                    }
+                    logger.debug("sig matches");
+
+                    k.setFirstValidSubKey(new MasterVerifyKey(vk), selfTx, otherTx);
+                    otherTransHashMap.get(pkhash).remove(otherTx);
+                    if (otherTransHashMap.get(pkhash).isEmpty()) {
+                        otherTransHashMap.remove(pkhash);
+                    }
+                    return true;
+                }
+            }
+        }
+
+        // no matching transaction found, save for later
+        if (!selfTransHashMap.containsKey(pkhash)) {
+            selfTransHashMap.put(pkhash, new ArrayList<OPRETTransaction>());
+        }
+        selfTransHashMap.get(pkhash).add(selfTx);
+
+        return false;
+    }
+
     private boolean handleEC0F(final OPRETTransaction t) {
         final byte[] sig = Bytes.toArray(t.opretData.get(1));
         if ((sig.length != 64)) {
@@ -247,163 +328,13 @@ public class OPRETECParser extends OPRETBaseHandler {
     }
 
     private boolean handleECA1(final OPRETTransaction t1) {
-        // FIXME: refactor with handleECA2
-
         logger.debug("handleECA1");
-        final byte[] data1 = Bytes.toArray(t1.opretData.get(1));
-        if (((data1.length < 48) || (data1.length > 64))) {
-            logger.debug("invalid chunk1 size = {}", data1.length);
-            return false;
-        }
-
-        final List<Byte> pkhash = t1.opretData.get(2);
-        if ((pkhash.size() != 12)) {
-            logger.debug("chunk 2 size != 12 but {} ", pkhash.size());
-            return false;
-        }
-
-        if (!verifyKeys.containsKey(pkhash)) {
-            return false;
-        }
-
-        if (transA2HashMap.containsKey(pkhash)) {
-            for (final OPRETTransaction t2 : transA2HashMap.get(pkhash)) {
-                final byte[] data2 = Bytes.toArray(t2.opretData.get(1));
-                final byte[] cipher = Bytes.concat(Arrays.copyOfRange(data1, 0, 48), Arrays.copyOfRange(data2, 0, 48));
-                BigInteger nonce1 = BigInteger.ZERO;
-                BigInteger nonce2 = BigInteger.ZERO;
-                if (data1.length > 48) {
-                    nonce1 = new BigInteger(1, Arrays.copyOfRange(data1, 48, data1.length));
-                    logger.debug("nonce1 {}", Encoder.HEX.encode(nonce1.toByteArray()));
-                    logger.debug("nonce1shift {}", Encoder.HEX.encode(nonce1.shiftLeft(16 * 8).toByteArray()));
-                }
-                if (data2.length > 48) {
-                    nonce2 = new BigInteger(1, Arrays.copyOfRange(data2, 48, data2.length));
-                    logger.debug("nonce2 {}", Encoder.HEX.encode(nonce2.toByteArray()));
-                }
-
-                final BigInteger nonce = nonce1.shiftLeft(16 * 8).or(nonce2);
-                logger.debug("nonceshift {}", Encoder.HEX.encode(nonce.toByteArray()));
-
-                byte[] noncebytes = Util.prependZeros(32, nonce.toByteArray());
-                noncebytes = Arrays.copyOfRange(noncebytes, noncebytes.length - 32, noncebytes.length);
-
-                for (final MasterVerifyKey k : verifyKeys.get(pkhash)) {
-                    byte[] sharedkey, xornonce;
-                    sharedkey = HASH.sha256(HASH.sha256(Bytes.concat(k.toBytes(), noncebytes)));
-                    xornonce = Arrays.copyOfRange(HASH.sha256(Bytes.concat(sharedkey, noncebytes)), 0, 24);
-                    logger.debug("checking key {}", Encoder.HEX.encode(k.toBytes()));
-                    logger.debug("noncebytes {}", Encoder.HEX.encode(noncebytes));
-                    logger.debug("noncebytes len {}", noncebytes.length);
-                    logger.debug("xornonce {}", Encoder.HEX.encode(xornonce));
-                    logger.debug("sharedkey {}", Encoder.HEX.encode(sharedkey));
-                    sodium();
-                    final byte[] msg = Util.zeros(96);
-                    Sodium.crypto_stream_xsalsa20_xor(msg, cipher, 96, xornonce, sharedkey);
-                    final byte[] vk = Arrays.copyOfRange(msg, 0, 32);
-                    final byte[] sig = Arrays.copyOfRange(msg, 32, 96);
-                    try {
-                        logger.debug("Checking sig {} with key {}", Encoder.HEX.encode(sig), Encoder.HEX.encode(vk));
-                        k.verify(vk, sig);
-                    } catch (final RuntimeException e) {
-                        logger.debug("sig does not match");
-                        continue;
-                    }
-                    logger.debug("sig matches");
-
-                    k.setFirstValidSubKey(new MasterVerifyKey(vk), t1, t2);
-                    transA2HashMap.get(pkhash).remove(t2);
-                    if (transA2HashMap.get(pkhash).isEmpty()) {
-                        transA2HashMap.remove(pkhash);
-                    }
-                    return true;
-                }
-            }
-        }
-        if (!transA1HashMap.containsKey(pkhash)) {
-            transA1HashMap.put(pkhash, new ArrayList<OPRETTransaction>());
-        }
-        transA1HashMap.get(pkhash).add(t1);
-
-        return false;
+        return handleAnnounce(t1, transA1HashMap, transA2HashMap, true);
     }
 
     private boolean handleECA2(final OPRETTransaction t2) {
-        // FIXME: refactor with handleECA1
         logger.debug("handleECA2");
-        final byte[] data2 = Bytes.toArray(t2.opretData.get(1));
-        if (((data2.length < 48) || (data2.length > 64))) {
-            logger.debug("invalid chunk1 size = {}", data2.length);
-            return false;
-        }
-
-        final List<Byte> pkhash = t2.opretData.get(2);
-        if ((pkhash.size() != 12)) {
-            logger.debug("chunk 2 size != 12 but {} ", pkhash.size());
-            return false;
-        }
-
-        if (!verifyKeys.containsKey(pkhash)) {
-            logger.debug("pkash not in hashmap");
-            return false;
-        }
-
-        if (transA1HashMap.containsKey(pkhash)) {
-            for (final OPRETTransaction t1 : transA1HashMap.get(pkhash)) {
-                final byte[] data1 = Bytes.toArray(t1.opretData.get(1));
-                final byte[] cipher = Bytes.concat(Arrays.copyOfRange(data1, 0, 48), Arrays.copyOfRange(data2, 0, 48));
-                BigInteger nonce1 = BigInteger.ZERO;
-                BigInteger nonce2 = BigInteger.ZERO;
-                if (data1.length > 48) {
-                    nonce1 = new BigInteger(1, Arrays.copyOfRange(data1, 48, data1.length));
-                }
-                if (data2.length > 48) {
-                    nonce2 = new BigInteger(1, Arrays.copyOfRange(data2, 48, data2.length));
-                }
-
-                final BigInteger nonce = nonce1.shiftLeft(16 * 8).or(nonce2);
-                byte[] noncebytes = Util.prependZeros(32, nonce.toByteArray());
-                noncebytes = Arrays.copyOfRange(noncebytes, noncebytes.length - 32, noncebytes.length);
-
-                for (final MasterVerifyKey k : verifyKeys.get(pkhash)) {
-                    byte[] sharedkey, xornonce;
-                    logger.debug("checking key {}", Encoder.HEX.encode(k.toBytes()));
-                    logger.debug("noncebytes {}", Encoder.HEX.encode(noncebytes));
-                    logger.debug("noncebytes len {}", noncebytes.length);
-                    sharedkey = HASH.sha256(HASH.sha256(Bytes.concat(k.toBytes(), noncebytes)));
-                    xornonce = Arrays.copyOfRange(HASH.sha256(Bytes.concat(sharedkey, noncebytes)), 0, 24);
-                    logger.debug("xornonce {}", Encoder.HEX.encode(xornonce));
-                    logger.debug("sharedkey {}", Encoder.HEX.encode(sharedkey));
-
-                    sodium();
-                    final byte[] msg = Util.zeros(96);
-                    Sodium.crypto_stream_xsalsa20_xor(msg, cipher, 96, xornonce, sharedkey);
-                    final byte[] vk = Arrays.copyOfRange(msg, 0, 32);
-                    final byte[] sig = Arrays.copyOfRange(msg, 32, 96);
-                    try {
-                        logger.debug("Checking sig {} with key {}", Encoder.HEX.encode(sig), Encoder.HEX.encode(vk));
-                        k.verify(vk, sig);
-                    } catch (final RuntimeException e) {
-                        logger.debug("sig does not match");
-                        continue;
-                    }
-
-                    logger.debug("sig matches");
-                    k.setFirstValidSubKey(new MasterVerifyKey(vk), t1, t2);
-                    transA1HashMap.get(pkhash).remove(t1);
-                    if (transA1HashMap.get(pkhash).isEmpty()) {
-                        transA1HashMap.remove(pkhash);
-                    }
-                    return true;
-                }
-            }
-        }
-        if (!transA2HashMap.containsKey(pkhash)) {
-            transA2HashMap.put(pkhash, new ArrayList<OPRETTransaction>());
-        }
-        transA2HashMap.get(pkhash).add(t2);
-        logger.debug("nothing in A1 HashMap");
-        return false;
+        return handleAnnounce(t2, transA2HashMap, transA1HashMap, false);
     }
 
     private boolean handleECA3(final OPRETTransaction t) {
@@ -416,7 +347,8 @@ public class OPRETECParser extends OPRETBaseHandler {
         return false;
     }
 
-    protected boolean handleTransaction(final OPRETTransaction t) {
+    @Override
+    public boolean pushTransaction(final OPRETTransaction t) {
         logger.debug("checking {}", t.opretData);
 
         if ((t.opretData.size() != 2) && (t.opretData.size() != 3) && (t.opretData.size() != 4)) {
@@ -462,11 +394,6 @@ public class OPRETECParser extends OPRETBaseHandler {
         }
 
         return false;
-    }
-
-    @Override
-    public void pushTransaction(final OPRETTransaction t) {
-        handleTransaction(t);
     }
 
     private void queueOnOPRETId(final MasterVerifyKey k) {

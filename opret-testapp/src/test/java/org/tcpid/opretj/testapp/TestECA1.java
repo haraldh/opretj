@@ -1,8 +1,9 @@
 /**
  *
  */
-package org.tcpid.opretj;
+package org.tcpid.opretj.testapp;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
@@ -16,6 +17,8 @@ import org.libsodium.jni.encoders.Encoder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.tcpid.key.MasterVerifyKey;
+import org.tcpid.opretj.OPRETTransaction;
+import org.tcpid.opretj.testapp.OPRETECParser;
 
 import com.google.common.primitives.Bytes;
 
@@ -24,14 +27,14 @@ public class TestECA1 {
 
     /**
      * Test method for
-     * {@link org.tcpid.opretj.OPRETECParser#pushTransaction(org.tcpid.opretj.OPRETTransaction)}.
+     * {@link org.tcpid.opretj.testapp.OPRETECParser#pushTransaction(org.tcpid.opretj.OPRETTransaction)}.
      */
     @Test
     public void testPushTransaction() {
         logger.debug("testPushTransaction");
 
         final byte[] cipher = Encoder.HEX.decode(
-                "bed9e277c3fde807eecb2100e2a4c9ec1067891b9f021e3bfbc599a3676048598e7c9801d94d9765cb965e64cfb9f493d7ae332bc85affb8bb0337b6835c51d156005db43ab8ea9b988632bfadcaee7dabf08709be248f5354d59a98e53f0cda");
+                "a15b671a9890a6bd0b6ed9a50193a15283001ccd72e106198b32242a906c300e263fc31dbfdaad66c40fc9796db3a464ab4313a06bbcd88fc1d503110016114c1da8bdf6e58a82be18d33c1baa96e1a9fe9c6f939b6838b30972be2de53f12d0");
         final byte[] vkb = Encoder.HEX.decode("fb2e360caf811b3aaf534d0458c2a2ca3e1f213b244a6f83af1ab50eddacdd8c");
         final MasterVerifyKey mvk = new MasterVerifyKey(vkb);
 
@@ -66,36 +69,39 @@ public class TestECA1 {
 
         parser.addVerifyKey(mvk, 0);
 
-        assertFalse(parser.handleTransaction(t2));
-        assertFalse(parser.handleTransaction(t3));
-        assertFalse(parser.handleTransaction(t4));
-        assertTrue(parser.handleTransaction(t1));
+        assertFalse(parser.pushTransaction(t2));
+        assertFalse(parser.pushTransaction(t3));
+        assertFalse(parser.pushTransaction(t4));
+        assertTrue(parser.pushTransaction(t1));
 
         mvk.clearSubKeys();
 
-        assertFalse(parser.handleTransaction(t1));
-        assertFalse(parser.handleTransaction(t3));
-        assertFalse(parser.handleTransaction(t4));
-        assertTrue(parser.handleTransaction(t2));
+        assertFalse(parser.pushTransaction(t1));
+        assertFalse(parser.pushTransaction(t3));
+        assertFalse(parser.pushTransaction(t4));
+        assertTrue(parser.pushTransaction(t2));
 
         mvk.clearSubKeys();
 
-        assertFalse(parser.handleTransaction(t1));
-        assertFalse(parser.handleTransaction(t4));
-        assertFalse(parser.handleTransaction(t3));
-        assertTrue(parser.handleTransaction(t2));
+        assertFalse(parser.pushTransaction(t1));
+        assertFalse(parser.pushTransaction(t4));
+        assertFalse(parser.pushTransaction(t3));
+        assertTrue(parser.pushTransaction(t2));
 
         mvk.clearSubKeys();
 
-        assertFalse(parser.handleTransaction(t2));
-        assertFalse(parser.handleTransaction(t4));
-        assertFalse(parser.handleTransaction(t3));
-        assertTrue(parser.handleTransaction(t1));
+        assertFalse(parser.pushTransaction(t2));
+        assertFalse(parser.pushTransaction(t4));
+        assertFalse(parser.pushTransaction(t3));
+        assertTrue(parser.pushTransaction(t1));
+        final MasterVerifyKey subkey = mvk.getValidSubKey();
+        assertArrayEquals(subkey.toBytes(),
+                Encoder.HEX.decode("e4acb361f4ec55804af6b5a1bbf5ca74ad78b4edc9a977a1dfed08872aa0a5db"));
     }
 
     /**
      * Test method for
-     * {@link org.tcpid.opretj.OPRETECParser#pushTransaction(org.tcpid.opretj.OPRETTransaction)}.
+     * {@link org.tcpid.opretj.testapp.OPRETECParser#pushTransaction(org.tcpid.opretj.OPRETTransaction)}.
      */
     @Test
     public void testPushTransactionWithNonce() {
@@ -125,22 +131,25 @@ public class TestECA1 {
 
         parser.addVerifyKey(mvk, 0);
 
-        assertFalse(parser.handleTransaction(t2));
-        assertTrue(parser.handleTransaction(t1));
+        assertFalse(parser.pushTransaction(t2));
+        assertTrue(parser.pushTransaction(t1));
 
         mvk.clearSubKeys();
 
-        assertFalse(parser.handleTransaction(t1));
-        assertTrue(parser.handleTransaction(t2));
+        assertFalse(parser.pushTransaction(t1));
+        assertTrue(parser.pushTransaction(t2));
 
         mvk.clearSubKeys();
 
-        assertFalse(parser.handleTransaction(t1));
-        assertTrue(parser.handleTransaction(t2));
+        assertFalse(parser.pushTransaction(t1));
+        assertTrue(parser.pushTransaction(t2));
 
         mvk.clearSubKeys();
 
-        assertFalse(parser.handleTransaction(t2));
-        assertTrue(parser.handleTransaction(t1));
+        assertFalse(parser.pushTransaction(t2));
+        assertTrue(parser.pushTransaction(t1));
+        final MasterVerifyKey subkey = mvk.getValidSubKey();
+        assertArrayEquals(subkey.toBytes(),
+                Encoder.HEX.decode("fb2e360caf811b3aaf534d0458c2a2ca3e1f213b244a6f83af1ab50eddacdd8c"));
     }
 }

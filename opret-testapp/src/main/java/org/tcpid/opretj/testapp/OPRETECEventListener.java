@@ -1,4 +1,4 @@
-package org.tcpid.opretj;
+package org.tcpid.opretj.testapp;
 
 import org.tcpid.key.MasterVerifyKey;
 
