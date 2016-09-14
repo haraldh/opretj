@@ -124,8 +124,13 @@ public class VerifyKey implements Comparable<VerifyKey> {
         final int[] bufferLen = new int[1];
 
         sodium();
-        return Util.isValid(Sodium.crypto_sign_ed25519_open(buffer, bufferLen, sigAndMsg, sigAndMsg.length, key),
-                "signature was forged or corrupted");
+        try {
+            Util.isValid(Sodium.crypto_sign_ed25519_open(buffer, bufferLen, sigAndMsg, sigAndMsg.length, key),
+                    "signature was forged or corrupted");
+            return true;
+        } catch (final Exception e) {
+            return false;
+        }
     }
 
     public boolean verify(final String message, final String signature, final Encoder encoder) {

@@ -168,7 +168,7 @@ public class OPRETECParser extends OPRETBaseHandler {
     private boolean handleAnnounce(final OPRETTransaction selfTx,
             final Map<List<Byte>, List<OPRETTransaction>> selfTransHashMap,
             final Map<List<Byte>, List<OPRETTransaction>> otherTransHashMap, final boolean isT1) {
-
+        logger.debug("handleAnnounce");
         final byte[] selfData = Bytes.toArray(selfTx.opretData.get(1));
         if (((selfData.length < 48) || (selfData.length > 64))) {
             logger.debug("invalid chunk1 size = {}", selfData.length);
@@ -176,7 +176,7 @@ public class OPRETECParser extends OPRETBaseHandler {
         }
 
         final List<Byte> pkhash = selfTx.opretData.get(2);
-        if ((pkhash.size() != 12)) {
+        if (pkhash.size() != 12) {
             logger.debug("chunk 2 size != 12 but {} ", pkhash.size());
             return false;
         }
@@ -216,16 +216,16 @@ public class OPRETECParser extends OPRETBaseHandler {
                     Sodium.crypto_stream_xsalsa20_xor(msg, cipher, 96, xornonce, sharedkey);
                     final byte[] vk = Arrays.copyOfRange(msg, 0, 32);
                     final byte[] sig = Arrays.copyOfRange(msg, 32, 96);
-                    try {
-                        logger.debug("Checking sig {} with key {}", Encoder.HEX.encode(sig), Encoder.HEX.encode(vk));
-                        k.verify(vk, sig);
-                    } catch (final RuntimeException e) {
+                    logger.debug("Checking sig {} with key {}", Encoder.HEX.encode(sig), Encoder.HEX.encode(vk));
+
+                    if (!k.verify(vk, sig)) {
                         logger.debug("sig does not match");
                         continue;
                     }
+
                     logger.debug("sig matches");
 
-                    k.setFirstValidSubKey(new MasterVerifyKey(vk), selfTx, otherTx);
+                    k.setFirstValidSubKey(new MasterVerifyKey(vk), isT1 ? selfTx : otherTx, isT1 ? otherTx : selfTx);
                     otherTransHashMap.get(pkhash).remove(otherTx);
                     if (otherTransHashMap.get(pkhash).isEmpty()) {
                         otherTransHashMap.remove(pkhash);
@@ -337,13 +337,91 @@ public class OPRETECParser extends OPRETBaseHandler {
         return handleAnnounce(t2, transA2HashMap, transA1HashMap, false);
     }
 
-    private boolean handleECA3(final OPRETTransaction t) {
-        // TODO Auto-generated method stub
-        return false;
+    private boolean handleECA3(final OPRETTransaction t1) {
+        logger.debug("handleECA3");
+        return handleNextKey(t1, transA3HashMap, transA4HashMap, true);
     }
 
-    private boolean handleECA4(final OPRETTransaction t) {
-        // TODO Auto-generated method stub
+    private boolean handleECA4(final OPRETTransaction t2) {
+        logger.debug("handleECA4");
+        return handleNextKey(t2, transA4HashMap, transA3HashMap, false);
+    }
+
+    private boolean handleNextKey(final OPRETTransaction selfTx,
+            final Map<List<Byte>, List<OPRETTransaction>> selfTransHashMap,
+            final Map<List<Byte>, List<OPRETTransaction>> otherTransHashMap, final boolean isT1) {
+
+        logger.debug("handleNextKey");
+        final byte[] selfData = Bytes.toArray(selfTx.opretData.get(1));
+        if (selfData.length != 48) {
+            logger.debug("invalid chunk1 size = {}", selfData.length);
+            return false;
+        }
+
+        final List<Byte> pkhash = selfTx.opretData.get(2);
+        if (pkhash.size() != 12) {
+            logger.debug("chunk 2 size != 12 but {} ", pkhash.size());
+            return false;
+        }
+
+        final List<Byte> subpkhash = selfTx.opretData.get(3);
+        if (subpkhash.size() != 12) {
+            logger.debug("chunk 2 size != 12 but {} ", subpkhash.size());
+            return false;
+        }
+
+        if (!verifyKeys.containsKey(pkhash)) {
+            return false;
+        }
+
+        if (otherTransHashMap.containsKey(pkhash)) {
+            for (final OPRETTransaction otherTx : otherTransHashMap.get(pkhash)) {
+                final byte[] otherData = Bytes.toArray(otherTx.opretData.get(1));
+                final byte[] cipher = isT1 ? Bytes.concat(selfData, otherData) : Bytes.concat(otherData, selfData);
+
+                for (final MasterVerifyKey k : verifyKeys.get(pkhash)) {
+                    final MasterVerifyKey vk_n = k.getSubKeybyHash(subpkhash);
+                    if (vk_n == null) {
+                        continue;
+                    }
+
+                    final byte[] sharedkey = HASH.sha256(vk_n.toHash());
+                    final byte[] xornonce = Arrays.copyOfRange(HASH.sha256(sharedkey), 0, 24);
+                    logger.debug("checking key {}", Encoder.HEX.encode(k.toBytes()));
+                    logger.debug("checking subkey {}", Encoder.HEX.encode(vk_n.toBytes()));
+                    logger.debug("xornonce {}", Encoder.HEX.encode(xornonce));
+                    logger.debug("sharedkey {}", Encoder.HEX.encode(sharedkey));
+                    sodium();
+                    final byte[] msg = Util.zeros(96);
+                    Sodium.crypto_stream_xsalsa20_xor(msg, cipher, 96, xornonce, sharedkey);
+                    final byte[] vk = Arrays.copyOfRange(msg, 0, 32);
+                    final byte[] sig = Arrays.copyOfRange(msg, 32, 96);
+                    logger.debug("Checking sig {} with key {}", Encoder.HEX.encode(sig), Encoder.HEX.encode(vk));
+
+                    if (!k.verify(vk, sig)) {
+                        logger.debug("sig does not match");
+                        continue;
+                    }
+
+                    logger.debug("sig matches");
+
+                    k.setNextValidSubKey(vk_n, new MasterVerifyKey(vk), isT1 ? selfTx : otherTx,
+                            isT1 ? otherTx : selfTx);
+                    otherTransHashMap.get(pkhash).remove(otherTx);
+                    if (otherTransHashMap.get(pkhash).isEmpty()) {
+                        otherTransHashMap.remove(pkhash);
+                    }
+                    return true;
+                }
+            }
+        }
+
+        // no matching transaction found, save for later
+        if (!selfTransHashMap.containsKey(pkhash)) {
+            selfTransHashMap.put(pkhash, new ArrayList<OPRETTransaction>());
+        }
+        selfTransHashMap.get(pkhash).add(selfTx);
+
         return false;
     }
 
@@ -352,6 +430,7 @@ public class OPRETECParser extends OPRETBaseHandler {
         logger.debug("checking {}", t.opretData);
 
         if ((t.opretData.size() != 2) && (t.opretData.size() != 3) && (t.opretData.size() != 4)) {
+            logger.debug("Wrong chunk count");
             return false;
         }
 

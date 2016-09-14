@@ -60,6 +60,7 @@ A MK is stored along with the key birthday, which is the date of the first appea
 ### MVK announce subkey VK 0xECA[1,2] - A-nnounce
 
 nonce[0:32] = nonce[0:16] | nonce[16:32]
+
 data chunks are prepended with zeros, if its length is smaller than 16.
 E.g.
 
@@ -74,14 +75,16 @@ If nonce is missing completely, then
 is assumed.
 
 A nonce **must** be used only once. Either only one VK_pub is announced per MVK ever and nonce is missing,
-or for every MVK announcement, the nonce has to be *unique* or *true random* bytes.
+or for every MVK announcement, the nonce has to be **unique** or **true random** bytes.
 
+```
 sharedkey  = sha256(sha256(MVK_pub | nonce))
 xornonce[24]  = sha256(sharedkey | nonce)[0:24]
 
 sig[64]    = crypto_sign(VK_pub, MKV)
 msg[96]    = VK_pub || sig
 cipher[96] = crypto_stream_xor(msg, xornonce, sharedkey)
+```
 
 clients may flush T1, if T2 does not follow in the next 20 blocks
 clients may flush T2, if T1 does not follow in the next 20 blocks
@@ -94,12 +97,14 @@ clients may flush T2, if T1 does not follow in the next 20 blocks
 | Size | 1         |   3    |              49             |             13            |
 
 ### MVK announce next subkey VK_n+1 0xECA[3,4] - A-nnounce
+```
 sharedkey  = sha256(sha256(VK_n_pub))
 nonce[24]  = sha256(sharedkey)[0:24]
 
 sig[64]    = crypto_sign(VK_n+1_pub, MKV)
 msg[96]    = VK_n+1_pub || sig
 cipher[96] = crypto_stream_xor(msg, nonce, sharedkey)
+```
 
 clients may flush T1, if T2 does not follow in the next 20 blocks
 clients may flush T2, if T1 does not follow in the next 20 blocks
@@ -112,8 +117,10 @@ clients may flush T2, if T1 does not follow in the next 20 blocks
 | Size | 1         |   3    |       49       |             13            |           13               |
 
 ### Public Doc or other key OK sign 0xEC5[1,2]
+```
 sign[64]   = Sign_Key('Sign ' || sha256(Doc/OK))
 data       = optional data (max 2*19 bytes)
+```
 
 clients may flush T1, if T2 does not follow in the next 20 blocks
 clients may flush T2, if T1 does not follow in the next 20 blocks

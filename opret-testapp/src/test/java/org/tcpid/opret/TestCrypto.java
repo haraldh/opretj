@@ -30,7 +30,7 @@ public class TestCrypto {
 
     @Test
     public void testDerive() {
-
+        logger.debug("testDerive");
         assertTrue("NONCE_BYTES > HMACSHA512256.HMACSHA512256_BYTES", NONCE_BYTES <= HMACSHA512256.HMACSHA512256_BYTES);
         assertEquals(SECRETKEY_BYTES, HMACSHA512256.HMACSHA512256_BYTES);
 
@@ -57,6 +57,7 @@ public class TestCrypto {
 
     @Test
     public void testSign() {
+        logger.debug("testSign");
         final MasterSigningKey msk = new MasterSigningKey(HASH.sha256("TESTSEED".getBytes()));
         final MasterVerifyKey vk = msk.getMasterVerifyKey();
         final byte[] revokemsg = Bytes.concat("Revoke ".getBytes(), vk.toHash());
@@ -66,6 +67,7 @@ public class TestCrypto {
 
     @Test
     public void testSignEnc() {
+        logger.debug("testSignEnc");
         final MasterSigningKey msk = new MasterSigningKey(HASH.sha256("TESTSEED".getBytes()));
         final MasterVerifyKey subkey = msk.getSubKey(1L).getMasterVerifyKey();
         final MasterVerifyKey vk = msk.getMasterVerifyKey();
@@ -98,7 +100,45 @@ public class TestCrypto {
     }
 
     @Test
+    public void testSignEncNext() {
+        logger.debug("testSignEncNext");
+
+        final MasterSigningKey msk = new MasterSigningKey(HASH.sha256("TESTSEED".getBytes()));
+        final MasterVerifyKey mvk = msk.getMasterVerifyKey();
+        final MasterVerifyKey subkey1 = msk.getSubKey(1L).getMasterVerifyKey();
+        final MasterVerifyKey subkey2 = msk.getSubKey(2L).getMasterVerifyKey();
+
+        byte[] sig = msk.sign(subkey2.toBytes());
+
+        logger.debug("using key {}", Encoder.HEX.encode(subkey1.toBytes()));
+        final byte[] sharedkey = HASH.sha256(HASH.sha256(subkey1.toBytes()));
+        final byte[] xornonce = Arrays.copyOfRange(HASH.sha256(sharedkey), 0, 24);
+        logger.debug("xornonce {}", Encoder.HEX.encode(xornonce));
+        logger.debug("sharedkey {}", Encoder.HEX.encode(sharedkey));
+
+        final byte[] cipher = Util.zeros(96);
+        byte[] msg = Bytes.concat(subkey2.toBytes(), sig);
+        assertEquals(96, msg.length);
+
+        sodium();
+        Sodium.crypto_stream_xsalsa20_xor(cipher, msg, 96, xornonce, sharedkey);
+        assertEquals(96, cipher.length);
+        logger.debug("Clear : {}", Encoder.HEX.encode(msg));
+        logger.debug("Cipher: {}", Encoder.HEX.encode(cipher));
+        msg = Util.zeros(96);
+        Sodium.crypto_stream_xsalsa20_xor(msg, cipher, 96, xornonce, sharedkey);
+
+        final byte[] vkb = Arrays.copyOfRange(msg, 0, 32);
+        sig = Arrays.copyOfRange(msg, 32, 96);
+        logger.debug("vkb : {}", Encoder.HEX.encode(vkb));
+        assertTrue("Verification of signature failed.", mvk.verify(vkb, sig));
+        assertArrayEquals(subkey2.toBytes(), vkb);
+    }
+
+    @Test
     public void testSignEncNoncebytes() {
+        logger.debug("testSignEncNoncebytes");
+
         final MasterSigningKey msk = new MasterSigningKey(HASH.sha256("TESTSEED".getBytes()));
         final MasterVerifyKey vk = msk.getMasterVerifyKey();
         byte[] sig = msk.sign(vk.toBytes());
