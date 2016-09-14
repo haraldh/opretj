@@ -2,3 +2,6 @@
 /walletappkit-example.spvchain
 /walletappkit-example.wallet
 /opretwalletorg.bitcoin.test.wallet
+/opretwalletorg.bitcoin.production.spvchain
+/opretwalletorg.bitcoin.production.wallet
+/opretwalletorg.bitcoin.test.wallet.bak
