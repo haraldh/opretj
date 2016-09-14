@@ -1,7 +1,7 @@
 /**
  *
  */
-package org.tcpid.opretj.testapp;
+package org.tcpid.opret;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertFalse;
@@ -17,8 +17,8 @@ import org.libsodium.jni.encoders.Encoder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.tcpid.key.MasterVerifyKey;
+import org.tcpid.opret.OPRETECParser;
 import org.tcpid.opretj.OPRETTransaction;
-import org.tcpid.opretj.testapp.OPRETECParser;
 
 import com.google.common.primitives.Bytes;
 
@@ -27,7 +27,7 @@ public class TestECA1 {
 
     /**
      * Test method for
-     * {@link org.tcpid.opretj.testapp.OPRETECParser#pushTransaction(org.tcpid.opretj.OPRETTransaction)}.
+     * {@link org.tcpid.opret.OPRETECParser#pushTransaction(org.tcpid.opretj.OPRETTransaction)}.
      */
     @Test
     public void testPushTransaction() {
@@ -101,7 +101,7 @@ public class TestECA1 {
 
     /**
      * Test method for
-     * {@link org.tcpid.opretj.testapp.OPRETECParser#pushTransaction(org.tcpid.opretj.OPRETTransaction)}.
+     * {@link org.tcpid.opret.OPRETECParser#pushTransaction(org.tcpid.opretj.OPRETTransaction)}.
      */
     @Test
     public void testPushTransactionWithNonce() {

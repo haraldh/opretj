@@ -1,4 +1,4 @@
-package org.tcpid.opretj.testapp;
+package org.tcpid.opret;
 
 import static org.bitcoinj.script.ScriptOpCodes.OP_RETURN;
 import static org.libsodium.jni.NaCl.sodium;

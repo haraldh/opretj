@@ -1,4 +1,4 @@
-package org.tcpid.opretj.testapp;
+package org.tcpid.opret;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;

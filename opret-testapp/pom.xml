@@ -80,7 +80,7 @@
 						<manifest>
 							<addClasspath>true</addClasspath>
 							<classpathPrefix>lib/</classpathPrefix>
-							<mainClass>org.tcpid.opretj.testapp.App</mainClass>
+							<mainClass>org.tcpid.opret.App</mainClass>
 						</manifest>
 					</archive>
 				</configuration>
@@ -129,7 +129,7 @@
 				<artifactId>exec-maven-plugin</artifactId>
 				<version>1.2.1</version>
 				<configuration>
-					<mainClass>org.tcpid.opretj.testapp.App</mainClass>
+					<mainClass>org.tcpid.opret.App</mainClass>
 					<!-- <systemProperties> <systemProperty> <key>logback.configurationFile</key> 
 						<value>${basedir}/opret-testapp/src/main/resources/logback.xml</value> </systemProperty> 
 						</systemProperties> -->
