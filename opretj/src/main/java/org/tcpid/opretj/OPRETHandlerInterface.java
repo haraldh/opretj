@@ -14,8 +14,8 @@ public interface OPRETHandlerInterface {
 
     Set<List<Byte>> getOPRETSet();
 
-    boolean pushTransaction(OPRETTransaction t);
-
     boolean removeOPRETChangeEventListener(OPRETChangeEventListener listener);
+
+    void pushTransactions(List<OPRETTransaction> pushlist);
 
 }

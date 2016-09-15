@@ -11,7 +11,6 @@ import com.google.common.primitives.Bytes;
 public class OPRETSimpleLogger extends OPRETBaseHandler {
     private static final Logger logger = LoggerFactory.getLogger(OPRETSimpleLogger.class);
 
-    @Override
     public boolean pushTransaction(final OPRETTransaction t) {
         final StringBuilder buf = new StringBuilder();
 
@@ -22,6 +21,13 @@ public class OPRETSimpleLogger extends OPRETBaseHandler {
 
         logger.info("Received in Block: {}\nTX: {}\nData: {}", t.blockHash, t.txHash, buf);
         return true;
+    }
+
+    @Override
+    public void pushTransactions(List<OPRETTransaction> pushlist) {
+        for (final OPRETTransaction t : pushlist) {
+            pushTransaction(t);
+        }
     }
 
 }

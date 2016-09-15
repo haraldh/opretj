@@ -15,12 +15,14 @@ import org.bitcoinj.wallet.Wallet;
 public class OPRETWalletAppKit extends WalletAppKit {
     // private final Logger logger = LoggerFactory.getLogger(OPRETWallet.class);
     private final OPRETHandlerInterface opbs;
+    private File spvblockstorefile;
 
     public OPRETWalletAppKit(final NetworkParameters params, final File directory, final String filePrefix,
             final OPRETHandlerInterface bs) {
         super(params, directory, filePrefix);
         opbs = bs;
         walletFactory = (params1, keyChainGroup) -> new OPRETWallet(params1, keyChainGroup, opbs);
+        spvblockstorefile = null;
     }
 
     @Override
@@ -53,6 +55,21 @@ public class OPRETWalletAppKit extends WalletAppKit {
                 || params.getId().equals(NetworkParameters.ID_TESTNET)) {
             file.deleteOnExit();
         }
+        this.spvblockstorefile = file;
         return new SPVBlockStore(params, file);
+    }
+
+    public void rescanBlockchain() {
+        wallet().clearTransactions(0);
+        wallet().setLastBlockSeenHeight(-1); // magic value
+        wallet().setLastBlockSeenHash(null);
+
+        stopAsync();
+        awaitTerminated();
+        try {
+            this.spvblockstorefile.delete();
+        } catch (final Exception e) {
+            e.printStackTrace();
+        }
     }
 }

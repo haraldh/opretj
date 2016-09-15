@@ -8,15 +8,17 @@
 			<pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
 		</encoder>
 	</appender>
-	<logger name="org.tcpid.opret.App" level="debug" />
 	<logger name="org.bitcoinj.core.listeners.DownloadProgressTracker" level="info" />
 	<logger name="org.bitcoinj.core.PeerGroup" level="error" />
 	<logger name="org.bitcoinj.core.AbstractBlockChain" level="error" />
 	<logger name="org.bitcoinj.core.PeerSocketHandler" level="error" />
 	<logger name="org.bitcoinj.net.ConnectionHandler" level="error" />
-	<logger name="org.tcpid.opret.OPRETECParser" level="debug" />
+	<logger name="org.tcpid.opretj.testapp.App" level="debug" />
+	<logger name="org.tcpid.opret.OPRETECParser" level="info" />
 	<logger name="org.tcpid.opret.TestCrypto" level="debug" />
+	<logger name="org.tcpid.opret.TestPushTransaction" level="debug" />
 <!-- 
+	<logger name="org.tcpid.opretj.OPRETWallet" level="debug" />
 	<logger name="eckey.OPRETSimpleLogger" level="debug" />
 	<logger name="eckey.OPRETSimpleParser" level="debug" />
 	<logger name="eckey.OPRETBaseHandler" level="debug" />

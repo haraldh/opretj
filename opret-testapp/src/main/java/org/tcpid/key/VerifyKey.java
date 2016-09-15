@@ -102,6 +102,9 @@ public class VerifyKey implements Comparable<VerifyKey> {
         if (this.revoked != true) {
             this.revoked = revoked;
         }
+        if (this.masterkey != null) {
+            this.masterkey.revokeSubKey(this);
+        }
     }
 
     public byte[] toBytes() {
@@ -114,7 +117,7 @@ public class VerifyKey implements Comparable<VerifyKey> {
 
     @Override
     public String toString() {
-        return Encoder.HEX.encode(key);
+        return Encoder.HEX.encode(key) + (revoked ? " - Revoked" : "");
     }
 
     public boolean verify(final byte[] message, final byte[] signature) {

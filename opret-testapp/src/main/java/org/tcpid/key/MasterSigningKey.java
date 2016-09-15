@@ -58,6 +58,10 @@ public class MasterSigningKey extends SigningKey {
 
     @Override
     public String toString() {
-        return "Index: " + this.keyindex.toString() + " " + Encoder.HEX.encode(seed);
+        if (this.keyindex.isEmpty()) {
+            return Encoder.HEX.encode(seed);
+        } else {
+            return "Index: " + this.keyindex.toString() + " " + Encoder.HEX.encode(seed);
+        }
     }
 }

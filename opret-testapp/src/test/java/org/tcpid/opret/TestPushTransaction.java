@@ -63,7 +63,7 @@ public class TestPushTransaction {
         opret_data.add(Bytes.asList(vkbsha96));
         final OPRETTransaction t2 = new OPRETTransaction(Sha256Hash.of(nullbyte), Sha256Hash.of(nullbyte), opret_data);
 
-        // create t3 and t4 to test if the parser handles garbage
+        // create t3 and t4 to test if the PARSER handles garbage
         opret_data = new ArrayList<>();
         opret_data.add(Bytes.asList(Encoder.HEX.decode("eca2")));
         opret_data.add(Bytes.asList(Arrays.copyOfRange(cipher, 0, 48)));
@@ -214,7 +214,7 @@ public class TestPushTransaction {
         opret_data.add(Bytes.asList(firstsub.getShortHash()));
         final OPRETTransaction t2 = new OPRETTransaction(Sha256Hash.of(nullbyte), Sha256Hash.of(nullbyte), opret_data);
 
-        // create t3 and t4 to test if the parser handles garbage
+        // create t3 and t4 to test if the PARSER handles garbage
         opret_data = new ArrayList<>();
         opret_data.add(Bytes.asList(Encoder.HEX.decode("eca4")));
         opret_data.add(Bytes.asList(Arrays.copyOfRange(cipher, 0, 48)));
@@ -239,8 +239,9 @@ public class TestPushTransaction {
         assertFalse(parser.pushTransaction(t4));
         assertTrue(parser.pushTransaction(t1));
 
-        mvk.revokeSubKey(firstsub);
+        firstsub.setRevoked(true);
         MasterVerifyKey subkey = mvk.getValidSubKey();
+        logger.debug("FirstValid: {}", subkey.toString());
         assertArrayEquals(subkey.toBytes(),
                 Encoder.HEX.decode("11e14458b16050a23a772e469ee424f513c3eb81682c0f9f81f07e607c6bf917"));
 
@@ -252,7 +253,7 @@ public class TestPushTransaction {
         assertFalse(parser.pushTransaction(t4));
         assertTrue(parser.pushTransaction(t2));
 
-        mvk.revokeSubKey(firstsub);
+        firstsub.setRevoked(true);
         subkey = mvk.getValidSubKey();
         assertArrayEquals(subkey.toBytes(),
                 Encoder.HEX.decode("11e14458b16050a23a772e469ee424f513c3eb81682c0f9f81f07e607c6bf917"));
@@ -265,7 +266,7 @@ public class TestPushTransaction {
         assertFalse(parser.pushTransaction(t3));
         assertTrue(parser.pushTransaction(t2));
 
-        mvk.revokeSubKey(firstsub);
+        firstsub.setRevoked(true);
         subkey = mvk.getValidSubKey();
         assertArrayEquals(subkey.toBytes(),
                 Encoder.HEX.decode("11e14458b16050a23a772e469ee424f513c3eb81682c0f9f81f07e607c6bf917"));
@@ -278,7 +279,7 @@ public class TestPushTransaction {
         assertFalse(parser.pushTransaction(t3));
         assertTrue(parser.pushTransaction(t1));
 
-        mvk.revokeSubKey(firstsub);
+        firstsub.setRevoked(true);
         subkey = mvk.getValidSubKey();
         assertArrayEquals(subkey.toBytes(),
                 Encoder.HEX.decode("11e14458b16050a23a772e469ee424f513c3eb81682c0f9f81f07e607c6bf917"));

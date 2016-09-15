@@ -9,9 +9,11 @@ import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import org.bitcoinj.core.PartialMerkleTree;
@@ -39,9 +41,10 @@ import com.google.common.primitives.Bytes;
 
 public class OPRETECParser extends OPRETBaseHandler {
     private static final Logger logger = LoggerFactory.getLogger(OPRETECParser.class);
-    public static final Hash HASH = new Hash();
 
+    public static final Hash HASH = new Hash();
     private static final List<Byte> OPRET_MAGIC_EC1C = Bytes.asList(Utils.HEX.decode("ec1c"));
+
     private static final List<Byte> OPRET_MAGIC_EC1D = Bytes.asList(Utils.HEX.decode("ec1d"));
     private static final List<Byte> OPRET_MAGIC_ECA1 = Bytes.asList(Utils.HEX.decode("eca1"));
     private static final List<Byte> OPRET_MAGIC_ECA2 = Bytes.asList(Utils.HEX.decode("eca2"));
@@ -59,12 +62,66 @@ public class OPRETECParser extends OPRETBaseHandler {
         logger.debug("Using VerifyKey {}", k);
 
         if (k.verify(revokemsg, sig)) {
-            logger.debug("REVOKED VerifyKey {}", k);
+            logger.debug("REVOKED Key {}", k.toString());
             return true;
         } else {
             logger.debug("SIGNATURE does not match!");
             return false;
         }
+    }
+
+    public static Script[] getAnnounceFirstScript(final MasterSigningKey msk, final MasterVerifyKey subkey) {
+        logger.debug("getAnnounceFirstScript");
+        final MasterVerifyKey mvk = msk.getMasterVerifyKey();
+        final byte[] sig = msk.sign(subkey.toBytes());
+
+        logger.debug("using key {}", Encoder.HEX.encode(mvk.toBytes()));
+        final byte[] noncebytes = Util.zeros(32);
+        final byte[] sharedkey = HASH.sha256(HASH.sha256(Bytes.concat(mvk.toBytes(), noncebytes)));
+        final byte[] xornonce = Arrays.copyOfRange(HASH.sha256(Bytes.concat(sharedkey, noncebytes)), 0, 24);
+        logger.debug("xornonce {}", Encoder.HEX.encode(xornonce));
+        logger.debug("sharedkey {}", Encoder.HEX.encode(sharedkey));
+
+        final byte[] cipher = Util.zeros(96);
+        final byte[] msg = Bytes.concat(subkey.toBytes(), sig);
+
+        sodium();
+        Sodium.crypto_stream_xsalsa20_xor(cipher, msg, 96, xornonce, sharedkey);
+
+        final Script script1 = new ScriptBuilder().op(OP_RETURN).data(Utils.HEX.decode("eca1"))
+                .data(Arrays.copyOfRange(cipher, 0, 48)).data(mvk.getShortHash()).build();
+        final Script script2 = new ScriptBuilder().op(OP_RETURN).data(Utils.HEX.decode("eca2"))
+                .data(Arrays.copyOfRange(cipher, 48, 96)).data(mvk.getShortHash()).build();
+        final Script[] scripts = { script1, script2 };
+        return scripts;
+    }
+
+    public static Script[] getAnnounceNextScript(final MasterSigningKey msk, final MasterVerifyKey prev,
+            final MasterVerifyKey next) {
+        logger.debug("getAnnounceNextScript");
+
+        final MasterVerifyKey mvk = msk.getMasterVerifyKey();
+
+        final byte[] sig = msk.sign(next.toBytes());
+
+        logger.debug("using key {}", Encoder.HEX.encode(prev.toBytes()));
+        final byte[] sharedkey = HASH.sha256(HASH.sha256(prev.toBytes()));
+        final byte[] xornonce = Arrays.copyOfRange(HASH.sha256(sharedkey), 0, 24);
+        logger.debug("xornonce {}", Encoder.HEX.encode(xornonce));
+        logger.debug("sharedkey {}", Encoder.HEX.encode(sharedkey));
+
+        final byte[] cipher = Util.zeros(96);
+        final byte[] msg = Bytes.concat(next.toBytes(), sig);
+
+        sodium();
+        Sodium.crypto_stream_xsalsa20_xor(cipher, msg, 96, xornonce, sharedkey);
+
+        final Script script1 = new ScriptBuilder().op(OP_RETURN).data(Utils.HEX.decode("eca3"))
+                .data(Arrays.copyOfRange(cipher, 0, 48)).data(mvk.getShortHash()).data(prev.getShortHash()).build();
+        final Script script2 = new ScriptBuilder().op(OP_RETURN).data(Utils.HEX.decode("eca4"))
+                .data(Arrays.copyOfRange(cipher, 48, 96)).data(mvk.getShortHash()).data(prev.getShortHash()).build();
+        final Script[] scripts = { script1, script2 };
+        return scripts;
     }
 
     public static Script getRevokeScript(final SigningKey key) {
@@ -76,9 +133,12 @@ public class OPRETECParser extends OPRETBaseHandler {
         return script;
     }
 
+    private boolean needscan;
+
     protected final Map<Sha256Hash, PartialMerkleTree> merkleHashMap = Collections.synchronizedMap(new HashMap<>());
 
     protected final Map<Sha256Hash, OPRETTransaction> transHashMap = Collections.synchronizedMap(new HashMap<>());
+
     protected final Map<List<Byte>, List<OPRETTransaction>> transA1HashMap = Collections
             .synchronizedMap(new HashMap<>());
     protected final Map<List<Byte>, List<OPRETTransaction>> transA2HashMap = Collections
@@ -91,10 +151,14 @@ public class OPRETECParser extends OPRETBaseHandler {
             .synchronizedMap(new HashMap<>());
     protected final Map<List<Byte>, List<OPRETTransaction>> trans52HashMap = Collections
             .synchronizedMap(new HashMap<>());
-
     protected final Map<List<Byte>, List<MasterVerifyKey>> verifyKeys = Collections.synchronizedMap(new HashMap<>());
 
     private final CopyOnWriteArrayList<ListenerRegistration<OPRETECEventListener>> opReturnChangeListeners = new CopyOnWriteArrayList<>();
+
+    public OPRETECParser() {
+        super();
+        needscan = true;
+    }
 
     /**
      * Adds an event listener object. Methods on this object are called when
@@ -113,8 +177,9 @@ public class OPRETECParser extends OPRETBaseHandler {
         }
 
         verifyKeys.get(hash).add(key);
-        logger.debug("Adding pkhash {}", key.getShortHash());
+        logger.debug("Adding pkhash {}", Utils.HEX.encode(key.getShortHash()));
         addOPRET(key.getShortHash(), earliestTime);
+        needscan = true;
     }
 
     public boolean cryptoSelfTest() {
@@ -224,8 +289,19 @@ public class OPRETECParser extends OPRETBaseHandler {
                     }
 
                     logger.debug("sig matches");
-
-                    k.setFirstValidSubKey(new MasterVerifyKey(vk), isT1 ? selfTx : otherTx, isT1 ? otherTx : selfTx);
+                    final MasterVerifyKey subkey = new MasterVerifyKey(vk);
+                    try {
+                        k.setFirstValidSubKey(subkey, isT1 ? selfTx : otherTx, isT1 ? otherTx : selfTx);
+                        final Date time = selfTx.getTime();
+                        if (time != null) {
+                            this.addVerifyKey(subkey, time.getTime() / 1000);
+                        }
+                        needscan = true;
+                        logger.info("MVK {} announced first subkey {}", k.toString(), subkey.toString());
+                    } catch (final IndexOutOfBoundsException e) {
+                        logger.info("FAILED: MVK {} announced first key {}, but it was already announced", k.toString(),
+                                subkey.toString());
+                    }
                     otherTransHashMap.get(pkhash).remove(otherTx);
                     if (otherTransHashMap.get(pkhash).isEmpty()) {
                         otherTransHashMap.remove(pkhash);
@@ -233,6 +309,99 @@ public class OPRETECParser extends OPRETBaseHandler {
                     return true;
                 }
             }
+        }
+
+        // no matching transaction found, save for later
+        if (!selfTransHashMap.containsKey(pkhash)) {
+            selfTransHashMap.put(pkhash, new ArrayList<OPRETTransaction>());
+        }
+        selfTransHashMap.get(pkhash).add(selfTx);
+
+        return false;
+    }
+
+    private boolean handleAnnounceNext(final OPRETTransaction selfTx,
+            final Map<List<Byte>, List<OPRETTransaction>> selfTransHashMap,
+            final Map<List<Byte>, List<OPRETTransaction>> otherTransHashMap, final boolean isT1) {
+
+        logger.debug("handleAnnounceNext");
+        final byte[] selfData = Bytes.toArray(selfTx.opretData.get(1));
+        if (selfData.length != 48) {
+            logger.debug("invalid chunk1 size = {}", selfData.length);
+            return false;
+        }
+
+        final List<Byte> pkhash = selfTx.opretData.get(2);
+        if (pkhash.size() != 12) {
+            logger.debug("chunk 2 size != 12 but {} ", pkhash.size());
+            return false;
+        }
+
+        final List<Byte> subpkhash = selfTx.opretData.get(3);
+        if (subpkhash.size() != 12) {
+            logger.debug("chunk 2 size != 12 but {} ", subpkhash.size());
+            return false;
+        }
+
+        if (!verifyKeys.containsKey(pkhash)) {
+            logger.debug("!verifyKeys.containsKey(pkhash)");
+            return false;
+        }
+
+        if (otherTransHashMap.containsKey(pkhash)) {
+            for (final OPRETTransaction otherTx : otherTransHashMap.get(pkhash)) {
+                final byte[] otherData = Bytes.toArray(otherTx.opretData.get(1));
+                final byte[] cipher = isT1 ? Bytes.concat(selfData, otherData) : Bytes.concat(otherData, selfData);
+
+                for (final MasterVerifyKey k : verifyKeys.get(pkhash)) {
+                    final MasterVerifyKey vk_n = k.getSubKeybyHash(subpkhash);
+                    if (vk_n == null) {
+                        logger.debug("! k.getSubKeybyHash(subpkhash)");
+                        continue;
+                    }
+
+                    final byte[] sharedkey = HASH.sha256(vk_n.toHash());
+                    final byte[] xornonce = Arrays.copyOfRange(HASH.sha256(sharedkey), 0, 24);
+                    logger.debug("checking key {}", Encoder.HEX.encode(k.toBytes()));
+                    logger.debug("checking subkey {}", Encoder.HEX.encode(vk_n.toBytes()));
+                    logger.debug("xornonce {}", Encoder.HEX.encode(xornonce));
+                    logger.debug("sharedkey {}", Encoder.HEX.encode(sharedkey));
+                    sodium();
+                    final byte[] msg = Util.zeros(96);
+                    Sodium.crypto_stream_xsalsa20_xor(msg, cipher, 96, xornonce, sharedkey);
+                    final byte[] vk = Arrays.copyOfRange(msg, 0, 32);
+                    final byte[] sig = Arrays.copyOfRange(msg, 32, 96);
+                    logger.debug("Checking sig {} with key {}", Encoder.HEX.encode(sig), Encoder.HEX.encode(vk));
+
+                    if (!k.verify(vk, sig)) {
+                        logger.debug("sig does not match");
+                        continue;
+                    }
+
+                    logger.debug("sig matches");
+                    final MasterVerifyKey subkey = new MasterVerifyKey(vk);
+                    try {
+                        k.setNextValidSubKey(vk_n, subkey, isT1 ? selfTx : otherTx, isT1 ? otherTx : selfTx);
+                        final Date time = selfTx.getTime();
+                        if (time != null) {
+                            this.addVerifyKey(subkey, time.getTime() / 1000);
+                        }
+                        needscan = true;
+                        logger.info("MKV {} announced next subkey:\n\t{} -> {}", k.toString(), vk_n.toString(),
+                                subkey.toString());
+                    } catch (final NoSuchElementException e) {
+                        logger.info("FAILED or duplicate: MKV {} announced next subkey:\n\t{} -> {}", k.toString(),
+                                vk_n.toString(), subkey.toString());
+                    }
+                    otherTransHashMap.get(pkhash).remove(otherTx);
+                    if (otherTransHashMap.get(pkhash).isEmpty()) {
+                        otherTransHashMap.remove(pkhash);
+                    }
+                    return true;
+                }
+            }
+        } else {
+            logger.debug("!otherTransHashMap.containsKey(pkhash)");
         }
 
         // no matching transaction found, save for later
@@ -264,11 +433,11 @@ public class OPRETECParser extends OPRETBaseHandler {
         for (final MasterVerifyKey k : verifyKeys.get(pkhash)) {
             if (checkKeyforRevoke(k, sig)) {
                 if (k.isRevoked()) {
-                    logger.debug("Duplicate REVOKE PK {} - SIG {}", Utils.HEX.encode(k.getShortHash()),
+                    logger.info("Duplicate REVOKE PK {} - SIG {}", Utils.HEX.encode(k.getShortHash()),
                             Utils.HEX.encode(sig));
                 } else {
                     k.setRevoked(true);
-                    logger.debug("REVOKE PK {} - SIG {}", Utils.HEX.encode(k.getShortHash()), Utils.HEX.encode(sig));
+                    logger.info("REVOKE PK {} - SIG {}", Utils.HEX.encode(k.getShortHash()), Utils.HEX.encode(sig));
                 }
                 queueOnOPRETRevoke(k);
                 return true;
@@ -284,6 +453,7 @@ public class OPRETECParser extends OPRETBaseHandler {
     }
 
     private boolean handleEC1D(final OPRETTransaction t) {
+        // TODO Auto-generated method stub
         final byte[] sig = Bytes.toArray(t.opretData.get(1));
         if ((sig.length != 64)) {
             logger.debug("chunk 1 size != 64, but {}", sig.length);
@@ -300,20 +470,18 @@ public class OPRETECParser extends OPRETBaseHandler {
             return false;
         }
 
-        for (final MasterVerifyKey k : verifyKeys.get(pkhash)) {
-            if (checkKeyforRevoke(k, sig)) {
-                if (k.isRevoked()) {
-                    logger.debug("Duplicate REVOKE PK {} - SIG {}", Utils.HEX.encode(k.getShortHash()),
-                            Utils.HEX.encode(sig));
-                } else {
-                    k.setRevoked(true);
-                    logger.debug("REVOKE PK {} - SIG {}", Utils.HEX.encode(k.getShortHash()), Utils.HEX.encode(sig));
-                }
-                queueOnOPRETId(k);
-                return true;
-
-            }
-        }
+        // FIXME
+        /*
+         * for (final MasterVerifyKey k : verifyKeys.get(pkhash)) { if
+         * (checkKeyforRevoke(k, sig)) { if (k.isRevoked()) {
+         * logger.debug("Duplicate REVOKE PK {} - SIG {}",
+         * Utils.HEX.encode(k.getShortHash()), Utils.HEX.encode(sig)); } else {
+         * k.setRevoked(true); logger.debug("REVOKE PK {} - SIG {}",
+         * Utils.HEX.encode(k.getShortHash()), Utils.HEX.encode(sig)); }
+         * queueOnOPRETId(k); return true;
+         *
+         * } }
+         */
         return false;
     }
 
@@ -339,93 +507,19 @@ public class OPRETECParser extends OPRETBaseHandler {
 
     private boolean handleECA3(final OPRETTransaction t1) {
         logger.debug("handleECA3");
-        return handleNextKey(t1, transA3HashMap, transA4HashMap, true);
+        return handleAnnounceNext(t1, transA3HashMap, transA4HashMap, true);
     }
 
     private boolean handleECA4(final OPRETTransaction t2) {
         logger.debug("handleECA4");
-        return handleNextKey(t2, transA4HashMap, transA3HashMap, false);
+        return handleAnnounceNext(t2, transA4HashMap, transA3HashMap, false);
     }
 
-    private boolean handleNextKey(final OPRETTransaction selfTx,
-            final Map<List<Byte>, List<OPRETTransaction>> selfTransHashMap,
-            final Map<List<Byte>, List<OPRETTransaction>> otherTransHashMap, final boolean isT1) {
-
-        logger.debug("handleNextKey");
-        final byte[] selfData = Bytes.toArray(selfTx.opretData.get(1));
-        if (selfData.length != 48) {
-            logger.debug("invalid chunk1 size = {}", selfData.length);
-            return false;
-        }
-
-        final List<Byte> pkhash = selfTx.opretData.get(2);
-        if (pkhash.size() != 12) {
-            logger.debug("chunk 2 size != 12 but {} ", pkhash.size());
-            return false;
-        }
-
-        final List<Byte> subpkhash = selfTx.opretData.get(3);
-        if (subpkhash.size() != 12) {
-            logger.debug("chunk 2 size != 12 but {} ", subpkhash.size());
-            return false;
-        }
-
-        if (!verifyKeys.containsKey(pkhash)) {
-            return false;
-        }
-
-        if (otherTransHashMap.containsKey(pkhash)) {
-            for (final OPRETTransaction otherTx : otherTransHashMap.get(pkhash)) {
-                final byte[] otherData = Bytes.toArray(otherTx.opretData.get(1));
-                final byte[] cipher = isT1 ? Bytes.concat(selfData, otherData) : Bytes.concat(otherData, selfData);
-
-                for (final MasterVerifyKey k : verifyKeys.get(pkhash)) {
-                    final MasterVerifyKey vk_n = k.getSubKeybyHash(subpkhash);
-                    if (vk_n == null) {
-                        continue;
-                    }
-
-                    final byte[] sharedkey = HASH.sha256(vk_n.toHash());
-                    final byte[] xornonce = Arrays.copyOfRange(HASH.sha256(sharedkey), 0, 24);
-                    logger.debug("checking key {}", Encoder.HEX.encode(k.toBytes()));
-                    logger.debug("checking subkey {}", Encoder.HEX.encode(vk_n.toBytes()));
-                    logger.debug("xornonce {}", Encoder.HEX.encode(xornonce));
-                    logger.debug("sharedkey {}", Encoder.HEX.encode(sharedkey));
-                    sodium();
-                    final byte[] msg = Util.zeros(96);
-                    Sodium.crypto_stream_xsalsa20_xor(msg, cipher, 96, xornonce, sharedkey);
-                    final byte[] vk = Arrays.copyOfRange(msg, 0, 32);
-                    final byte[] sig = Arrays.copyOfRange(msg, 32, 96);
-                    logger.debug("Checking sig {} with key {}", Encoder.HEX.encode(sig), Encoder.HEX.encode(vk));
-
-                    if (!k.verify(vk, sig)) {
-                        logger.debug("sig does not match");
-                        continue;
-                    }
-
-                    logger.debug("sig matches");
-
-                    k.setNextValidSubKey(vk_n, new MasterVerifyKey(vk), isT1 ? selfTx : otherTx,
-                            isT1 ? otherTx : selfTx);
-                    otherTransHashMap.get(pkhash).remove(otherTx);
-                    if (otherTransHashMap.get(pkhash).isEmpty()) {
-                        otherTransHashMap.remove(pkhash);
-                    }
-                    return true;
-                }
-            }
-        }
-
-        // no matching transaction found, save for later
-        if (!selfTransHashMap.containsKey(pkhash)) {
-            selfTransHashMap.put(pkhash, new ArrayList<OPRETTransaction>());
-        }
-        selfTransHashMap.get(pkhash).add(selfTx);
-
-        return false;
+    public boolean needScan() {
+        // TODO Auto-generated method stub
+        return this.needscan;
     }
 
-    @Override
     public boolean pushTransaction(final OPRETTransaction t) {
         logger.debug("checking {}", t.opretData);
 
@@ -475,6 +569,20 @@ public class OPRETECParser extends OPRETBaseHandler {
         return false;
     }
 
+    @Override
+    public void pushTransactions(List<OPRETTransaction> pushlist) {
+        Collections.sort(pushlist, (a, b) -> {
+            final List<Byte> chunka = a.opretData.get(0);
+            final List<Byte> chunkb = b.opretData.get(0);
+            final Long la = ((long) chunka.get(1) * 256) + (long) chunka.get(0);
+            final Long lb = ((long) chunkb.get(1) * 256) + (long) chunkb.get(0);
+            return la.compareTo(lb);
+        });
+        for (final OPRETTransaction t : pushlist) {
+            pushTransaction(t);
+        }
+    }
+
     private void queueOnOPRETId(final MasterVerifyKey k) {
         // TODO Auto-generated method stub
 
@@ -504,5 +612,10 @@ public class OPRETECParser extends OPRETBaseHandler {
         verifyKeys.get(hash).remove(key);
 
         removeOPRET(key.getShortHash());
+    }
+
+    public void willScan() {
+        // TODO Auto-generated method stub
+        this.needscan = false;
     }
 }

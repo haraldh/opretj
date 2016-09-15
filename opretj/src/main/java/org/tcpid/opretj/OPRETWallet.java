@@ -142,6 +142,7 @@ public class OPRETWallet extends Wallet implements BlocksDownloadedEventListener
     @Override
     public void onBlocksDownloaded(final Peer peer, final Block block, final FilteredBlock filteredBlock,
             final int blocksLeft) {
+        final ArrayList<OPRETTransaction> pushlist = new ArrayList<>();
 
         if (!pendingTransactions.containsKey(block.getHash())) {
             return;
@@ -149,7 +150,12 @@ public class OPRETWallet extends Wallet implements BlocksDownloadedEventListener
 
         for (final OPRETTransaction t : pendingTransactions.get(block.getHash()).values()) {
             t.setPartialMerkleTree(filteredBlock.getPartialMerkleTree());
-            opbs.pushTransaction(t);
+            t.setTime(block.getTime());
+            pushlist.add(t);
+        }
+
+        if (!pushlist.isEmpty()) {
+            opbs.pushTransactions(pushlist);
         }
 
         pendingTransactions.remove(block.getHash());
@@ -172,6 +178,7 @@ public class OPRETWallet extends Wallet implements BlocksDownloadedEventListener
             logger.debug("False Positive Transaction {}", tx.toString());
             return;
         }
+        logger.debug("Found Transaction {}", tx.toString());
         final Sha256Hash h = block.getHeader().getHash();
 
         if (!pendingTransactions.containsKey(h)) {

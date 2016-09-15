@@ -105,19 +105,19 @@ public class TestCrypto {
 
         final MasterSigningKey msk = new MasterSigningKey(HASH.sha256("TESTSEED".getBytes()));
         final MasterVerifyKey mvk = msk.getMasterVerifyKey();
-        final MasterVerifyKey subkey1 = msk.getSubKey(1L).getMasterVerifyKey();
-        final MasterVerifyKey subkey2 = msk.getSubKey(2L).getMasterVerifyKey();
+        final MasterVerifyKey prev = msk.getSubKey(1L).getMasterVerifyKey();
+        final MasterVerifyKey next = msk.getSubKey(2L).getMasterVerifyKey();
 
-        byte[] sig = msk.sign(subkey2.toBytes());
+        byte[] sig = msk.sign(next.toBytes());
 
-        logger.debug("using key {}", Encoder.HEX.encode(subkey1.toBytes()));
-        final byte[] sharedkey = HASH.sha256(HASH.sha256(subkey1.toBytes()));
+        logger.debug("using key {}", Encoder.HEX.encode(prev.toBytes()));
+        final byte[] sharedkey = HASH.sha256(HASH.sha256(prev.toBytes()));
         final byte[] xornonce = Arrays.copyOfRange(HASH.sha256(sharedkey), 0, 24);
         logger.debug("xornonce {}", Encoder.HEX.encode(xornonce));
         logger.debug("sharedkey {}", Encoder.HEX.encode(sharedkey));
 
         final byte[] cipher = Util.zeros(96);
-        byte[] msg = Bytes.concat(subkey2.toBytes(), sig);
+        byte[] msg = Bytes.concat(next.toBytes(), sig);
         assertEquals(96, msg.length);
 
         sodium();
@@ -132,7 +132,7 @@ public class TestCrypto {
         sig = Arrays.copyOfRange(msg, 32, 96);
         logger.debug("vkb : {}", Encoder.HEX.encode(vkb));
         assertTrue("Verification of signature failed.", mvk.verify(vkb, sig));
-        assertArrayEquals(subkey2.toBytes(), vkb);
+        assertArrayEquals(next.toBytes(), vkb);
     }
 
     @Test
