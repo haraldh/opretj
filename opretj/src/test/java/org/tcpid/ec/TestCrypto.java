@@ -1,4 +1,4 @@
-package org.tcpid.opretj;
+package org.tcpid.ec;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
@@ -18,9 +18,9 @@ import org.libsodium.jni.crypto.Util;
 import org.libsodium.jni.encoders.Encoder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.tcpid.key.HMACSHA512256;
-import org.tcpid.key.MasterSigningKey;
-import org.tcpid.key.MasterVerifyKey;
+import org.tcpid.ec.HMACSHA512256;
+import org.tcpid.ec.MasterSigningKey;
+import org.tcpid.ec.MasterVerifyKey;
 
 import com.google.common.primitives.Bytes;
 

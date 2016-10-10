@@ -4,11 +4,11 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.Executor;
 
-public interface OPRETHandlerInterface {
+public interface HandlerInterface {
 
     // void addOPRET(byte[] magic, long earliestTime);
 
-    void addOPRETChangeEventListener(Executor executor, OPRETChangeEventListener listener);
+    void addOPRETChangeEventListener(Executor executor, ChangeEventListener listener);
 
     long getEarliestElementCreationTime();
 
@@ -18,8 +18,8 @@ public interface OPRETHandlerInterface {
 
     // void removeOPRET(byte[] magic);
 
-    void pushTransaction(OPRETTransaction t);
+    void pushTransaction(Transaction t);
 
-    boolean removeOPRETChangeEventListener(OPRETChangeEventListener listener);
+    boolean removeOPRETChangeEventListener(ChangeEventListener listener);
 
 }

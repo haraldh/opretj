@@ -1,4 +1,4 @@
-package org.tcpid.key;
+package org.tcpid.ec;
 
 import java.util.ArrayList;
 

@@ -1,5 +1,5 @@
 package org.tcpid.opretj;
 
-public interface OPRETChangeEventListener {
+public interface ChangeEventListener {
     void onOPRETChanged();
 }

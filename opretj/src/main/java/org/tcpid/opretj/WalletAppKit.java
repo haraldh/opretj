@@ -5,27 +5,25 @@ import static com.google.common.base.Preconditions.checkState;
 import java.io.File;
 
 import org.bitcoinj.core.NetworkParameters;
-import org.bitcoinj.kits.WalletAppKit;
 import org.bitcoinj.store.BlockStore;
 import org.bitcoinj.store.BlockStoreException;
 import org.bitcoinj.store.SPVBlockStore;
 import org.bitcoinj.utils.Threading;
-import org.bitcoinj.wallet.Wallet;
 
-public class OPRETWalletAppKit extends WalletAppKit {
-    // private final Logger logger = LoggerFactory.getLogger(OPRETWallet.class);
-    private final OPRETHandlerInterface opbs;
+public class WalletAppKit extends org.bitcoinj.kits.WalletAppKit {
+    // private final Logger logger = LoggerFactory.getLogger(Wallet.class);
+    private final HandlerInterface opbs;
 
-    public OPRETWalletAppKit(final NetworkParameters params, final File directory, final String filePrefix,
-            final OPRETHandlerInterface bs) {
+    public WalletAppKit(final NetworkParameters params, final File directory, final String filePrefix,
+            final HandlerInterface bs) {
         super(params, directory, filePrefix);
         opbs = bs;
-        walletFactory = (params1, keyChainGroup) -> new OPRETWallet(params1, keyChainGroup, opbs);
+        walletFactory = (params1, keyChainGroup) -> new Wallet(params1, keyChainGroup, opbs);
     }
 
     @Override
     protected void onSetupCompleted() {
-        final OPRETWallet wallet = opretwallet();
+        final Wallet wallet = opretwallet();
         opbs.addOPRETChangeEventListener(Threading.USER_THREAD, wallet);
         // TODO: remove
         wallet.reset();
@@ -36,11 +34,11 @@ public class OPRETWalletAppKit extends WalletAppKit {
     /*
      * public ListenableFuture setupCompleted() { return; }
      */
-    public OPRETWallet opretwallet() throws RuntimeException, IllegalStateException {
+    public Wallet opretwallet() throws RuntimeException, IllegalStateException {
         checkState((state() == State.STARTING) || (state() == State.RUNNING), "Cannot call until startup is complete");
-        final Wallet w = wallet();
-        if (w instanceof OPRETWallet) {
-            return (OPRETWallet) w;
+        final org.bitcoinj.wallet.Wallet w = wallet();
+        if (w instanceof Wallet) {
+            return (Wallet) w;
         } else {
             throw new RuntimeException("wallet != OPTRETWallet");
         }

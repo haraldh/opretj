@@ -1,4 +1,4 @@
-package org.tcpid.opretj;
+package org.tcpid.ec;
 
 import static org.bitcoinj.script.ScriptOpCodes.OP_RETURN;
 import static org.libsodium.jni.NaCl.sodium;
@@ -27,16 +27,13 @@ import org.libsodium.jni.crypto.Util;
 import org.libsodium.jni.encoders.Encoder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.tcpid.key.HMACSHA512256;
-import org.tcpid.key.MasterSigningKey;
-import org.tcpid.key.MasterVerifyKey;
-import org.tcpid.key.SigningKey;
-import org.tcpid.key.VerifyKey;
+import org.tcpid.opretj.BaseHandler;
+import org.tcpid.opretj.Transaction;
 
 import com.google.common.primitives.Bytes;
 
-public class OPRETECParser extends OPRETBaseHandler {
-    private static final Logger logger = LoggerFactory.getLogger(OPRETECParser.class);
+public class Parser extends BaseHandler {
+    private static final Logger logger = LoggerFactory.getLogger(Parser.class);
     public static final Hash HASH = new Hash();
 
     private static final List<Byte> OPRET_MAGIC_EC1C = Bytes.asList(Utils.HEX.decode("ec1c"));
@@ -49,6 +46,12 @@ public class OPRETECParser extends OPRETBaseHandler {
     private static final List<Byte> OPRET_MAGIC_EC52 = Bytes.asList(Utils.HEX.decode("ec52"));
     private static final List<Byte> OPRET_MAGIC_EC0F = Bytes.asList(Utils.HEX.decode("ec0f"));
 
+    private final RevokeDBInterface revokeDB;
+    
+    public Parser(RevokeDBInterface revokedb) {
+        revokeDB = revokedb;
+    }
+    
     public static boolean checkKeyforRevoke(final VerifyKey k, final byte[] sig) {
         logger.debug("CHECKING REVOKE PKHASH {} - SIG {}", Utils.HEX.encode(k.toHash()), Utils.HEX.encode(sig));
 
@@ -76,32 +79,24 @@ public class OPRETECParser extends OPRETBaseHandler {
 
     protected final Map<Sha256Hash, PartialMerkleTree> merkleHashMap = Collections.synchronizedMap(new HashMap<>());
 
-    protected final Map<Sha256Hash, OPRETTransaction> transHashMap = Collections.synchronizedMap(new HashMap<>());
-    protected final Map<List<Byte>, List<OPRETTransaction>> transA1HashMap = Collections
+    protected final Map<Sha256Hash, Transaction> transHashMap = Collections.synchronizedMap(new HashMap<>());
+    protected final Map<List<Byte>, List<Transaction>> transA1HashMap = Collections
             .synchronizedMap(new HashMap<>());
-    protected final Map<List<Byte>, List<OPRETTransaction>> transA2HashMap = Collections
+    protected final Map<List<Byte>, List<Transaction>> transA2HashMap = Collections
             .synchronizedMap(new HashMap<>());
-    protected final Map<List<Byte>, List<OPRETTransaction>> transA3HashMap = Collections
+    protected final Map<List<Byte>, List<Transaction>> transA3HashMap = Collections
             .synchronizedMap(new HashMap<>());
-    protected final Map<List<Byte>, List<OPRETTransaction>> transA4HashMap = Collections
+    protected final Map<List<Byte>, List<Transaction>> transA4HashMap = Collections
             .synchronizedMap(new HashMap<>());
-    protected final Map<List<Byte>, List<OPRETTransaction>> trans51HashMap = Collections
+    protected final Map<List<Byte>, List<Transaction>> trans51HashMap = Collections
             .synchronizedMap(new HashMap<>());
-    protected final Map<List<Byte>, List<OPRETTransaction>> trans52HashMap = Collections
+    protected final Map<List<Byte>, List<Transaction>> trans52HashMap = Collections
             .synchronizedMap(new HashMap<>());
 
     protected final Map<List<Byte>, List<MasterVerifyKey>> verifyKeys = Collections.synchronizedMap(new HashMap<>());
 
-    private final CopyOnWriteArrayList<ListenerRegistration<OPRETECEventListener>> opReturnChangeListeners = new CopyOnWriteArrayList<>();
-
-    /**
-     * Adds an event listener object. Methods on this object are called when
-     * scripts watched by this wallet change. The listener is executed by the
-     * given executor.
-     */
-    public void addOPRETECRevokeEventListener(final OPRETECEventListener listener) {
-        // This is thread safe, so we don't need to take the lock.
-        opReturnChangeListeners.add(new ListenerRegistration<OPRETECEventListener>(listener, Threading.SAME_THREAD));
+    public void addRevokeEventListener(final RevokeEventListener listener) {
+        revokeDB.addRevokeEventListener(listener);
     }
 
     public void addVerifyKey(final MasterVerifyKey key, final long earliestTime) {
@@ -113,6 +108,7 @@ public class OPRETECParser extends OPRETBaseHandler {
         verifyKeys.get(hash).add(key);
         logger.debug("Adding pkhash {}", key.getShortHash());
         addOPRET(key.getShortHash(), earliestTime);
+        revokeDB.storeForCheck(key);
     }
 
     public boolean cryptoSelfTest() {
@@ -163,7 +159,7 @@ public class OPRETECParser extends OPRETBaseHandler {
         return true;
     }
 
-    private boolean handleEC0F(final OPRETTransaction t) {
+    private boolean handleEC0F(final Transaction t) {
         final byte[] sig = Bytes.toArray(t.opretData.get(1));
         if ((sig.length != 64)) {
             logger.debug("chunk 1 size != 64, but {}", sig.length);
@@ -197,12 +193,12 @@ public class OPRETECParser extends OPRETBaseHandler {
         return false;
     }
 
-    private boolean handleEC1C(final OPRETTransaction t) {
+    private boolean handleEC1C(final Transaction t) {
         // TODO Auto-generated method stub
         return false;
     }
 
-    private boolean handleEC1D(final OPRETTransaction t) {
+    private boolean handleEC1D(final Transaction t) {
         final byte[] sig = Bytes.toArray(t.opretData.get(1));
         if ((sig.length != 64)) {
             logger.debug("chunk 1 size != 64, but {}", sig.length);
@@ -236,17 +232,17 @@ public class OPRETECParser extends OPRETBaseHandler {
         return false;
     }
 
-    private boolean handleEC51(final OPRETTransaction t) {
+    private boolean handleEC51(final Transaction t) {
         // TODO Auto-generated method stub
         return false;
     }
 
-    private boolean handleEC52(final OPRETTransaction t) {
+    private boolean handleEC52(final Transaction t) {
         // TODO Auto-generated method stub
         return false;
     }
 
-    private boolean handleECA1(final OPRETTransaction t1) {
+    private boolean handleECA1(final Transaction t1) {
         // FIXME: refactor with handleECA2
 
         logger.debug("handleECA1");
@@ -267,7 +263,7 @@ public class OPRETECParser extends OPRETBaseHandler {
         }
 
         if (transA2HashMap.containsKey(pkhash)) {
-            for (final OPRETTransaction t2 : transA2HashMap.get(pkhash)) {
+            for (final Transaction t2 : transA2HashMap.get(pkhash)) {
                 final byte[] data2 = Bytes.toArray(t2.opretData.get(1));
                 final byte[] cipher = Bytes.concat(Arrays.copyOfRange(data1, 0, 48), Arrays.copyOfRange(data2, 0, 48));
                 BigInteger nonce1 = BigInteger.ZERO;
@@ -321,14 +317,14 @@ public class OPRETECParser extends OPRETBaseHandler {
             }
         }
         if (!transA1HashMap.containsKey(pkhash)) {
-            transA1HashMap.put(pkhash, new ArrayList<OPRETTransaction>());
+            transA1HashMap.put(pkhash, new ArrayList<Transaction>());
         }
         transA1HashMap.get(pkhash).add(t1);
 
         return false;
     }
 
-    private boolean handleECA2(final OPRETTransaction t2) {
+    private boolean handleECA2(final Transaction t2) {
         // FIXME: refactor with handleECA1
         logger.debug("handleECA2");
         final byte[] data2 = Bytes.toArray(t2.opretData.get(1));
@@ -349,7 +345,7 @@ public class OPRETECParser extends OPRETBaseHandler {
         }
 
         if (transA1HashMap.containsKey(pkhash)) {
-            for (final OPRETTransaction t1 : transA1HashMap.get(pkhash)) {
+            for (final Transaction t1 : transA1HashMap.get(pkhash)) {
                 final byte[] data1 = Bytes.toArray(t1.opretData.get(1));
                 final byte[] cipher = Bytes.concat(Arrays.copyOfRange(data1, 0, 48), Arrays.copyOfRange(data2, 0, 48));
                 BigInteger nonce1 = BigInteger.ZERO;
@@ -399,24 +395,24 @@ public class OPRETECParser extends OPRETBaseHandler {
             }
         }
         if (!transA2HashMap.containsKey(pkhash)) {
-            transA2HashMap.put(pkhash, new ArrayList<OPRETTransaction>());
+            transA2HashMap.put(pkhash, new ArrayList<Transaction>());
         }
         transA2HashMap.get(pkhash).add(t2);
         logger.debug("nothing in A1 HashMap");
         return false;
     }
 
-    private boolean handleECA3(final OPRETTransaction t) {
+    private boolean handleECA3(final Transaction t) {
         // TODO Auto-generated method stub
         return false;
     }
 
-    private boolean handleECA4(final OPRETTransaction t) {
+    private boolean handleECA4(final Transaction t) {
         // TODO Auto-generated method stub
         return false;
     }
 
-    protected boolean handleTransaction(final OPRETTransaction t) {
+    protected boolean handleTransaction(final Transaction t) {
         logger.debug("checking {}", t.opretData);
 
         if ((t.opretData.size() != 2) && (t.opretData.size() != 3) && (t.opretData.size() != 4)) {
@@ -465,7 +461,7 @@ public class OPRETECParser extends OPRETBaseHandler {
     }
 
     @Override
-    public void pushTransaction(final OPRETTransaction t) {
+    public void pushTransaction(final Transaction t) {
         handleTransaction(t);
     }
 
@@ -474,18 +470,12 @@ public class OPRETECParser extends OPRETBaseHandler {
 
     }
 
-    protected void queueOnOPRETRevoke(final MasterVerifyKey key) {
-        for (final ListenerRegistration<OPRETECEventListener> registration : opReturnChangeListeners) {
-            registration.executor.execute(() -> registration.listener.onOPRETRevoke(key));
-        }
-    }
-
     /**
      * Removes the given event listener object. Returns true if the listener was
      * removed, false if that listener was never added.
      */
-    public boolean removeOPRETECRevokeEventListener(final OPRETECEventListener listener) {
-        return ListenerRegistration.removeFromList(listener, opReturnChangeListeners);
+    public boolean removeOPRETECRevokeEventListener(final RevokeEventListener listener) {
+        return revokeDB.removeRevokeEventListener(listener);
     }
 
     public void removeVerifyKey(final MasterVerifyKey key) {

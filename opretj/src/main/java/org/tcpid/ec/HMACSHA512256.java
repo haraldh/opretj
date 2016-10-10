@@ -1,4 +1,4 @@
-package org.tcpid.key;
+package org.tcpid.ec;
 
 import static org.libsodium.jni.NaCl.sodium;
 

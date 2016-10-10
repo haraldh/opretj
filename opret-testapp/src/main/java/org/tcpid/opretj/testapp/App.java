@@ -21,10 +21,11 @@ import org.bitcoinj.wallet.SendRequest;
 import org.libsodium.jni.crypto.Hash;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.tcpid.key.MasterSigningKey;
-import org.tcpid.opretj.OPRETECParser;
-import org.tcpid.opretj.OPRETWallet;
-import org.tcpid.opretj.OPRETWalletAppKit;
+import org.tcpid.ec.MasterSigningKey;
+import org.tcpid.ec.Parser;
+import org.tcpid.ec.RevokeBabuDB;
+import org.tcpid.opretj.Wallet;
+import org.tcpid.opretj.WalletAppKit;
 
 import com.google.common.util.concurrent.Service;
 
@@ -41,7 +42,7 @@ public class App {
     private final static Logger logger = LoggerFactory.getLogger(App.class);
     private final static MasterSigningKey SK = new MasterSigningKey(HASH.sha256("TESTSEED".getBytes()));
 
-    private static void displayBalance(final OPRETWalletAppKit kit, final PrintWriter out) {
+    private static void displayBalance(final WalletAppKit kit, final PrintWriter out) {
         out.write("Balance: " + kit.wallet().getBalance().toFriendlyString() + "\n");
         out.flush();
     }
@@ -83,7 +84,7 @@ public class App {
 
     }
 
-    private static void handleConsole(final OPRETWalletAppKit kit) throws IOException {
+    private static void handleConsole(final WalletAppKit kit) throws IOException {
         final ConsoleReader reader = new ConsoleReader();
         final String[] cmds = { "help", "quit", "exit", "balance", "receive", "empty", "opret" };
         reader.addCompleter(new StringsCompleter(cmds));
@@ -173,8 +174,8 @@ public class App {
         }
 
         final NetworkParameters params = net.value(opts).get();
-
-        final OPRETECParser bs = new OPRETECParser();
+        final RevokeBabuDB revokedb = new RevokeBabuDB("revokedb");
+        final Parser bs = new Parser(revokedb);
 
         final boolean chk = bs.cryptoSelfTest();
         if (chk) {
@@ -184,7 +185,7 @@ public class App {
             System.exit(-1);
         }
 
-        bs.addOPRETECRevokeEventListener((key) -> {
+        bs.addRevokeEventListener((key) -> {
             System.out.println("Revoked Key: " + Utils.HEX.encode(key.toBytes()));
         });
 
@@ -199,7 +200,7 @@ public class App {
 
         bs.addVerifyKey(SK.getMasterVerifyKey(), earliestTime);
 
-        final OPRETWalletAppKit kit = new OPRETWalletAppKit(params, new File("."), "opretwallet" + params.getId(), bs);
+        final WalletAppKit kit = new WalletAppKit(params, new File("."), "opretwallet" + params.getId(), bs);
 
         kit.addListener(new Service.Listener() {
             @Override
@@ -230,7 +231,7 @@ public class App {
             System.exit(-1);
         }
 
-        final OPRETWallet wallet = kit.opretwallet();
+        final Wallet wallet = kit.opretwallet();
 
         wallet.addCoinsReceivedEventListener((wallet1, tx, prevBalance, newBalance) -> {
             final Coin c = tx.getValue(wallet1);
@@ -276,12 +277,12 @@ public class App {
         kit.awaitTerminated();
     }
 
-    private static boolean sendOPReturn(final OPRETWalletAppKit kit, final PrintWriter output) {
-        final OPRETWallet wallet = kit.opretwallet();
+    private static boolean sendOPReturn(final WalletAppKit kit, final PrintWriter output) {
+        final Wallet wallet = kit.opretwallet();
         final NetworkParameters params = wallet.getNetworkParameters();
 
         final Transaction t = new Transaction(params);
-        final Script script = OPRETECParser.getRevokeScript(SK);
+        final Script script = Parser.getRevokeScript(SK);
         t.addOutput(Coin.ZERO, script);
         final SendRequest request = SendRequest.forTx(t);
         request.ensureMinRequiredFee = true;

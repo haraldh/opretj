@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package org.tcpid.key;
+package org.tcpid.ec;
 
 import static org.libsodium.jni.NaCl.sodium;
 import static org.libsodium.jni.SodiumConstants.PUBLICKEY_BYTES;

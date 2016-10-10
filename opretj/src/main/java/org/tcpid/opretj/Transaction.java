@@ -9,7 +9,7 @@ import org.bitcoinj.core.Utils;
 
 import com.google.common.primitives.Bytes;
 
-public class OPRETTransaction implements Serializable {
+public class Transaction implements Serializable {
     /**
      *
      */
@@ -19,7 +19,7 @@ public class OPRETTransaction implements Serializable {
     public final List<List<Byte>> opretData;
     private PartialMerkleTree partialMerkleTree;
 
-    public OPRETTransaction(final Sha256Hash blockHash, final Sha256Hash txHash, final List<List<Byte>> opret_data) {
+    public Transaction(final Sha256Hash blockHash, final Sha256Hash txHash, final List<List<Byte>> opret_data) {
         this.blockHash = blockHash;
         this.txHash = txHash;
         this.opretData = opret_data;

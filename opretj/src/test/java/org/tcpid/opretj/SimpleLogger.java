@@ -8,11 +8,11 @@ import org.slf4j.LoggerFactory;
 
 import com.google.common.primitives.Bytes;
 
-public class OPRETSimpleLogger extends OPRETBaseHandler {
-    private static final Logger logger = LoggerFactory.getLogger(OPRETSimpleLogger.class);
+public class SimpleLogger extends BaseHandler {
+    private static final Logger logger = LoggerFactory.getLogger(SimpleLogger.class);
 
     @Override
-    public void pushTransaction(final OPRETTransaction t) {
+    public void pushTransaction(final Transaction t) {
         final StringBuilder buf = new StringBuilder();
 
         for (final List<Byte> d : t.opretData) {

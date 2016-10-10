@@ -1,7 +1,7 @@
 /**
  *
  */
-package org.tcpid.opretj;
+package org.tcpid.ec;
 
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -15,7 +15,8 @@ import org.junit.Test;
 import org.libsodium.jni.encoders.Encoder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.tcpid.key.MasterVerifyKey;
+import org.tcpid.ec.Parser;
+import org.tcpid.opretj.Transaction;
 
 import com.google.common.primitives.Bytes;
 
@@ -24,7 +25,7 @@ public class TestECA1 {
 
     /**
      * Test method for
-     * {@link org.tcpid.opretj.OPRETECParser#pushTransaction(org.tcpid.opretj.OPRETTransaction)}.
+     * {@link org.tcpid.ec.Parser#pushTransaction(org.tcpid.opretj.Transaction)}.
      */
     @Test
     public void testPushTransaction() {
@@ -42,27 +43,27 @@ public class TestECA1 {
         opret_data.add(Bytes.asList(Encoder.HEX.decode("eca1")));
         opret_data.add(Bytes.asList(Arrays.copyOfRange(cipher, 0, 48)));
         opret_data.add(Bytes.asList(vkbsha96));
-        final OPRETTransaction t1 = new OPRETTransaction(Sha256Hash.of(nullbyte), Sha256Hash.of(nullbyte), opret_data);
+        final Transaction t1 = new Transaction(Sha256Hash.of(nullbyte), Sha256Hash.of(nullbyte), opret_data);
 
         opret_data = new ArrayList<>();
         opret_data.add(Bytes.asList(Encoder.HEX.decode("eca2")));
         opret_data.add(Bytes.asList(Arrays.copyOfRange(cipher, 48, 96)));
         opret_data.add(Bytes.asList(vkbsha96));
-        final OPRETTransaction t2 = new OPRETTransaction(Sha256Hash.of(nullbyte), Sha256Hash.of(nullbyte), opret_data);
+        final Transaction t2 = new Transaction(Sha256Hash.of(nullbyte), Sha256Hash.of(nullbyte), opret_data);
 
         opret_data = new ArrayList<>();
         opret_data.add(Bytes.asList(Encoder.HEX.decode("eca2")));
         opret_data.add(Bytes.asList(Arrays.copyOfRange(cipher, 0, 48)));
         opret_data.add(Bytes.asList(vkbsha96));
-        final OPRETTransaction t3 = new OPRETTransaction(Sha256Hash.of(nullbyte), Sha256Hash.of(nullbyte), opret_data);
+        final Transaction t3 = new Transaction(Sha256Hash.of(nullbyte), Sha256Hash.of(nullbyte), opret_data);
 
         opret_data = new ArrayList<>();
         opret_data.add(Bytes.asList(Encoder.HEX.decode("eca1")));
         opret_data.add(Bytes.asList(Arrays.copyOfRange(cipher, 48, 96)));
         opret_data.add(Bytes.asList(vkbsha96));
-        final OPRETTransaction t4 = new OPRETTransaction(Sha256Hash.of(nullbyte), Sha256Hash.of(nullbyte), opret_data);
+        final Transaction t4 = new Transaction(Sha256Hash.of(nullbyte), Sha256Hash.of(nullbyte), opret_data);
 
-        final OPRETECParser parser = new OPRETECParser();
+        final Parser parser = new Parser();
 
         parser.addVerifyKey(mvk, 0);
 
@@ -95,7 +96,7 @@ public class TestECA1 {
 
     /**
      * Test method for
-     * {@link org.tcpid.opretj.OPRETECParser#pushTransaction(org.tcpid.opretj.OPRETTransaction)}.
+     * {@link org.tcpid.ec.Parser#pushTransaction(org.tcpid.opretj.Transaction)}.
      */
     @Test
     public void testPushTransactionWithNonce() {
@@ -113,15 +114,15 @@ public class TestECA1 {
         final byte[] byte1f = { (byte) 0x11 };
         opret_data.add(Bytes.asList(Bytes.concat(Arrays.copyOfRange(cipher, 0, 48), byte1f)));
         opret_data.add(Bytes.asList(vkbsha96));
-        final OPRETTransaction t1 = new OPRETTransaction(Sha256Hash.of(nullbyte), Sha256Hash.of(nullbyte), opret_data);
+        final Transaction t1 = new Transaction(Sha256Hash.of(nullbyte), Sha256Hash.of(nullbyte), opret_data);
 
         opret_data = new ArrayList<>();
         opret_data.add(Bytes.asList(Encoder.HEX.decode("eca2")));
         opret_data.add(Bytes.asList(Arrays.copyOfRange(cipher, 48, 96)));
         opret_data.add(Bytes.asList(vkbsha96));
-        final OPRETTransaction t2 = new OPRETTransaction(Sha256Hash.of(nullbyte), Sha256Hash.of(nullbyte), opret_data);
+        final Transaction t2 = new Transaction(Sha256Hash.of(nullbyte), Sha256Hash.of(nullbyte), opret_data);
 
-        final OPRETECParser parser = new OPRETECParser();
+        final Parser parser = new Parser();
 
         parser.addVerifyKey(mvk, 0);
 

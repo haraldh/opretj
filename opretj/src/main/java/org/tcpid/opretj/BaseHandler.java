@@ -15,9 +15,9 @@ import org.slf4j.LoggerFactory;
 
 import com.google.common.primitives.Bytes;
 
-public abstract class OPRETBaseHandler implements OPRETHandlerInterface {
-    private static final Logger logger = LoggerFactory.getLogger(OPRETBaseHandler.class);
-    private final CopyOnWriteArrayList<ListenerRegistration<OPRETChangeEventListener>> opReturnChangeListeners = new CopyOnWriteArrayList<ListenerRegistration<OPRETChangeEventListener>>();
+public abstract class BaseHandler implements HandlerInterface {
+    private static final Logger logger = LoggerFactory.getLogger(BaseHandler.class);
+    private final CopyOnWriteArrayList<ListenerRegistration<ChangeEventListener>> opReturnChangeListeners = new CopyOnWriteArrayList<ListenerRegistration<ChangeEventListener>>();
     private final Map<List<Byte>, Long> magicBytes = Collections.synchronizedMap(new HashMap<>());
 
     protected void addOPRET(final byte[] magic, final long earliestTime) {
@@ -33,9 +33,9 @@ public abstract class OPRETBaseHandler implements OPRETHandlerInterface {
      * given executor.
      */
     @Override
-    public void addOPRETChangeEventListener(final Executor executor, final OPRETChangeEventListener listener) {
+    public void addOPRETChangeEventListener(final Executor executor, final ChangeEventListener listener) {
         // This is thread safe, so we don't need to take the lock.
-        opReturnChangeListeners.add(new ListenerRegistration<OPRETChangeEventListener>(listener, executor));
+        opReturnChangeListeners.add(new ListenerRegistration<ChangeEventListener>(listener, executor));
     }
 
     @Override
@@ -63,7 +63,7 @@ public abstract class OPRETBaseHandler implements OPRETHandlerInterface {
     }
 
     protected void queueOnOPRETChanged() {
-        for (final ListenerRegistration<OPRETChangeEventListener> registration : opReturnChangeListeners) {
+        for (final ListenerRegistration<ChangeEventListener> registration : opReturnChangeListeners) {
             registration.executor.execute(() -> registration.listener.onOPRETChanged());
         }
     }
@@ -78,7 +78,7 @@ public abstract class OPRETBaseHandler implements OPRETHandlerInterface {
      * removed, false if that listener was never added.
      */
     @Override
-    public boolean removeOPRETChangeEventListener(final OPRETChangeEventListener listener) {
+    public boolean removeOPRETChangeEventListener(final ChangeEventListener listener) {
         return ListenerRegistration.removeFromList(listener, opReturnChangeListeners);
     }
 

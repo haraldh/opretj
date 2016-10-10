@@ -18,7 +18,6 @@ import org.bitcoinj.core.Peer;
 import org.bitcoinj.core.ScriptException;
 import org.bitcoinj.core.Sha256Hash;
 import org.bitcoinj.core.StoredBlock;
-import org.bitcoinj.core.Transaction;
 import org.bitcoinj.core.TransactionOutput;
 import org.bitcoinj.core.Utils;
 import org.bitcoinj.core.VerificationException;
@@ -26,22 +25,21 @@ import org.bitcoinj.core.listeners.BlocksDownloadedEventListener;
 import org.bitcoinj.script.Script;
 import org.bitcoinj.script.ScriptChunk;
 import org.bitcoinj.wallet.KeyChainGroup;
-import org.bitcoinj.wallet.Wallet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.primitives.Bytes;
 
-public class OPRETWallet extends Wallet implements BlocksDownloadedEventListener, OPRETChangeEventListener {
+public class Wallet extends org.bitcoinj.wallet.Wallet implements BlocksDownloadedEventListener, ChangeEventListener {
 
-    private final OPRETHandlerInterface opbs;
-    private final Logger logger = LoggerFactory.getLogger(OPRETWallet.class);
+    private final HandlerInterface opbs;
+    private final Logger logger = LoggerFactory.getLogger(Wallet.class);
 
-    protected final Map<Sha256Hash, Map<Sha256Hash, OPRETTransaction>> pendingTransactions = Collections
+    protected final Map<Sha256Hash, Map<Sha256Hash, Transaction>> pendingTransactions = Collections
             .synchronizedMap(new HashMap<>());
 
-    public OPRETWallet(final NetworkParameters params, final KeyChainGroup keyChainGroup,
-            final OPRETHandlerInterface bs) {
+    public Wallet(final NetworkParameters params, final KeyChainGroup keyChainGroup,
+            final HandlerInterface bs) {
         super(params, keyChainGroup);
         opbs = bs;
     }
@@ -84,7 +82,7 @@ public class OPRETWallet extends Wallet implements BlocksDownloadedEventListener
     }
 
     @Override
-    public boolean isPendingTransactionRelevant(final Transaction tx) throws ScriptException {
+    public boolean isPendingTransactionRelevant(final org.bitcoinj.core.Transaction tx) throws ScriptException {
         logger.debug("isPendingTransactionRelevant {}", tx.getHashAsString());
 
         if (pendingTransactions.containsValue(tx)) {
@@ -98,7 +96,7 @@ public class OPRETWallet extends Wallet implements BlocksDownloadedEventListener
         return false;
     }
 
-    public List<List<Byte>> isTransactionOPReturn(final Transaction tx) throws ScriptException {
+    public List<List<Byte>> isTransactionOPReturn(final org.bitcoinj.core.Transaction tx) throws ScriptException {
         final Set<List<Byte>> magicBytes = opbs.getOPRETSet();
         final List<List<Byte>> myList = new ArrayList<>();
 
@@ -147,7 +145,7 @@ public class OPRETWallet extends Wallet implements BlocksDownloadedEventListener
             return;
         }
 
-        for (final OPRETTransaction t : pendingTransactions.get(block.getHash()).values()) {
+        for (final Transaction t : pendingTransactions.get(block.getHash()).values()) {
             t.setPartialMerkleTree(filteredBlock.getPartialMerkleTree());
             opbs.pushTransaction(t);
         }
@@ -161,7 +159,7 @@ public class OPRETWallet extends Wallet implements BlocksDownloadedEventListener
     }
 
     @Override
-    public void receiveFromBlock(final Transaction tx, final StoredBlock block, final BlockChain.NewBlockType blockType,
+    public void receiveFromBlock(final org.bitcoinj.core.Transaction tx, final StoredBlock block, final BlockChain.NewBlockType blockType,
             final int relativityOffset) throws VerificationException {
 
         super.receiveFromBlock(tx, block, blockType, relativityOffset);
@@ -175,10 +173,10 @@ public class OPRETWallet extends Wallet implements BlocksDownloadedEventListener
         final Sha256Hash h = block.getHeader().getHash();
 
         if (!pendingTransactions.containsKey(h)) {
-            pendingTransactions.put(h, Collections.synchronizedMap(new HashMap<Sha256Hash, OPRETTransaction>()));
+            pendingTransactions.put(h, Collections.synchronizedMap(new HashMap<Sha256Hash, Transaction>()));
         }
 
-        pendingTransactions.get(h).put(tx.getHash(), new OPRETTransaction(h, tx.getHash(), myList));
+        pendingTransactions.get(h).put(tx.getHash(), new Transaction(h, tx.getHash(), myList));
 
     }
 }
